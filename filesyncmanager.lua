@@ -479,10 +479,18 @@ function FileSyncManager:showQRCode()
         if btn.dimen then
             if x >= btn.dimen.x and x <= btn.dimen.x + btn.dimen.w
                and y >= btn.dimen.y and y <= btn.dimen.y + btn.dimen.h then
-                -- Stop button tapped: stop server and restart KOReader
+                -- Stop button tapped: show feedback, then stop and restart
                 self._manager:closeQRScreen()
-                self._manager:stop(true)
-                UIManager:restartKOReader()
+                UIManager:show(InfoMessage:new{
+                    text = _("Stopping server..."),
+                    timeout = 2,
+                })
+                -- Schedule the actual stop+restart after a brief moment so the
+                -- InfoMessage renders on the e-ink screen before the restart
+                UIManager:scheduleIn(0.5, function()
+                    self._manager:stop(true)
+                    UIManager:restartKOReader()
+                end)
                 return true
             end
         end

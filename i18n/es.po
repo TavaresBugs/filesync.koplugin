@@ -80,5 +80,8 @@ msgstr "Escanea el código QR o ingresa la URL en tu navegador. Ambos dispositiv
 msgid "Stop Server"
 msgstr "Detener servidor"
 
+msgid "Stopping server..."
+msgstr "Deteniendo servidor..."
+
 msgid "Server running in the background. Stop the server to save battery."
 msgstr "Servidor ejecutándose en segundo plano. Detén el servidor para ahorrar batería."

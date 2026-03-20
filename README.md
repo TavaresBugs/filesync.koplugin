@@ -8,11 +8,11 @@ Works on **Kindle** and **Kobo** devices running KOReader.
   <img src="screenshots/qr-screen.png" alt="QR code screen on e-reader" width="500">
 </p>
 <p align="center">
-  <img src="screenshots/web-home.png" alt="QR code screen on e-reader" width="280">
+  <img src="screenshots/web-home.png" alt="QR code screen on e-reader" width="250">
   &nbsp;&nbsp;&nbsp;
-  <img src="screenshots/web-directory.png" alt="Web interface - home" width="280">
+  <img src="screenshots/web-directory.png" alt="Web interface - home" width="250">
   &nbsp;&nbsp;&nbsp;
-  <img src="screenshots/web-file-detail.png" alt="Web interface - file detail" width="280">
+  <img src="screenshots/web-file-detail.png" alt="Web interface - file detail" width="250">
 </p>
 
 ## Features
@@ -122,11 +122,11 @@ Once connected, the web interface lets you:
 - **Sort** — Use the dropdown to sort by name, date, size, or type in ascending or descending order.
 
 <p align="center">
-  <img src="screenshots/web-home.png" alt="File browser - home" width="270">
+  <img src="screenshots/web-home.png" alt="File browser - home" width="250">
   &nbsp;&nbsp;
-  <img src="screenshots/web-directory.png" alt="File browser - directory with upload" width="270">
+  <img src="screenshots/web-directory.png" alt="File browser - directory with upload" width="250">
   &nbsp;&nbsp;
-  <img src="screenshots/web-file-detail.png" alt="File detail view" width="270">
+  <img src="screenshots/web-file-detail.png" alt="File detail view" width="250">
 </p>
 
 ### Stopping the Server

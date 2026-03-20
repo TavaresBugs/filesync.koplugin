@@ -403,6 +403,13 @@ function FileOps:handleUpload(rel_dir, body, boundary)
                 -- Clean up filename (remove path components from some browsers)
                 filename = filename:match("([^/\\]+)$") or filename
 
+                -- Fix iOS Safari appending .zip to EPUB/CBZ files (they are ZIP-based)
+                if filename:match("%.epub%.zip$") then
+                    filename = filename:gsub("%.zip$", "")
+                elseif filename:match("%.cbz%.zip$") then
+                    filename = filename:gsub("%.zip$", "")
+                end
+
                 -- Validate filename
                 local valid, valid_err = self:_validateFilename(filename)
                 if valid then
@@ -714,14 +721,44 @@ function FileOps:_parseMobiMetadata(full_path)
         local full_title_offset = read_uint32_be(record_data, mobi_start + 84)
         local full_title_length = read_uint32_be(record_data, mobi_start + 88)
 
-        -- EXTH flags at mobi_start + 96 (offset 96 within MOBI header portion)
-        local exth_flags = read_uint32_be(record_data, mobi_start + 96)
-        local has_exth = (exth_flags % 128) >= 64 -- bit 6
+        -- Check for EXTH by looking for the magic bytes directly after the MOBI header
+        -- (the EXTH flags field at offset 0x80 is unreliable across format versions)
+        local has_exth = false
+        local exth_check_pos = mobi_start + mobi_header_length
+        if exth_check_pos + 4 <= #record_data then
+            has_exth = record_data:sub(exth_check_pos, exth_check_pos + 3) == "EXTH"
+        end
 
         -- First image record index at mobi_start + 108
         local first_image_record = nil
         if #record_data >= mobi_start + 111 then
             first_image_record = read_uint32_be(record_data, mobi_start + 108)
+        end
+
+        -- If first_image_record is 0 or invalid, scan PDB records to find first image
+        if not first_image_record or first_image_record == 0 or first_image_record >= num_records then
+            -- Scan from the end backwards to find the first image record
+            -- Images (JPEG/PNG/GIF) are typically the last records before FLIS/FCIS
+            local img_records = {}
+            for ri = num_records - 1, 1, -1 do
+                local ri_offset_pos = record_table_start + (ri * 8)
+                if ri_offset_pos + 4 <= #header_data then
+                    local ri_offset = read_uint32_be(header_data, ri_offset_pos)
+                    f:seek("set", ri_offset)
+                    local magic = f:read(4)
+                    if magic then
+                        local b1, b2 = string.byte(magic, 1), string.byte(magic, 2)
+                        if (b1 == 0xFF and b2 == 0xD8) or magic == "\137PNG" or magic:sub(1,3) == "GIF" then
+                            table.insert(img_records, 1, ri)
+                        else
+                            if #img_records > 0 then break end -- stop once we pass the image block
+                        end
+                    end
+                end
+            end
+            if #img_records > 0 then
+                first_image_record = img_records[1]
+            end
         end
 
         -- Extract the full title from the record

@@ -1,5 +1,6 @@
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
-local _ = require("gettext")
+local ok_i18n, plugin_gettext = pcall(require, "filesync_i18n")
+local _ = ok_i18n and plugin_gettext or require("gettext")
 
 local FileSync = WidgetContainer:extend{
     name = "FileSync",

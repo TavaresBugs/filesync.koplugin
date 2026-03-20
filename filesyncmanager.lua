@@ -20,7 +20,8 @@ local VerticalSpan = require("ui/widget/verticalspan")
 local Font = require("ui/font")
 local logger = require("logger")
 local Screen = Device.screen
-local _ = require("gettext")
+local ok_i18n, plugin_gettext = pcall(require, "filesync_i18n")
+local _ = ok_i18n and plugin_gettext or require("gettext")
 local T = require("ffi/util").template
 
 local FileSyncManager = {
@@ -312,7 +313,7 @@ end
 
 function FileSyncManager:closeQRScreen()
     if self._qr_widget then
-        UIManager:close(self._qr_widget)
+        UIManager:close(self._qr_widget, "full")
         self._qr_widget = nil
     end
 end
@@ -469,7 +470,7 @@ function FileSyncManager:showQRCode()
         },
     }
 
-    function widget:onTap(_, ges)
+    function widget:onTap(_event, ges)
         if not ges then return true end
         local x, y = ges.pos.x, ges.pos.y
 

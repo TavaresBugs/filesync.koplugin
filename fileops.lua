@@ -248,27 +248,27 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
         if a.is_dir and not b.is_dir then return true end
         if not a.is_dir and b.is_dir then return false end
 
-        local result
-        if sort_by == "name" then
-            result = a.name:lower() < b.name:lower()
-        elseif sort_by == "size" then
-            result = a.size < b.size
-        elseif sort_by == "date" then
-            result = a.modified < b.modified
-        elseif sort_by == "type" then
-            if a.type == b.type then
-                result = a.name:lower() < b.name:lower()
-            else
-                result = a.type < b.type
-            end
-        else
-            result = a.name:lower() < b.name:lower()
+        -- For descending, swap a and b so the same < operator works correctly
+        -- (using "not result" breaks strict weak ordering for equal values)
+        if sort_order == "desc" then
+            a, b = b, a
         end
 
-        if sort_order == "desc" then
-            return not result
+        if sort_by == "name" then
+            return a.name:lower() < b.name:lower()
+        elseif sort_by == "size" then
+            return a.size < b.size
+        elseif sort_by == "date" then
+            return a.modified < b.modified
+        elseif sort_by == "type" then
+            if a.type == b.type then
+                return a.name:lower() < b.name:lower()
+            else
+                return a.type < b.type
+            end
+        else
+            return a.name:lower() < b.name:lower()
         end
-        return result
     end)
 
     -- Build breadcrumbs

@@ -4,6 +4,14 @@ A KOReader plugin that launches a local web server on your e-reader and displays
 
 Works on **Kindle** and **Kobo** devices running KOReader.
 
+<p align="center">
+  <img src="screenshots/qr-screen.png" alt="QR code screen on e-reader" width="280">
+  &nbsp;&nbsp;&nbsp;
+  <img src="screenshots/web-home.png" alt="Web interface - home" width="280">
+  &nbsp;&nbsp;&nbsp;
+  <img src="screenshots/web-file-detail.png" alt="Web interface - file detail" width="280">
+</p>
+
 ## Features
 
 - **QR Code Access** — Scan to connect instantly, no typing URLs
@@ -80,11 +88,17 @@ If you see the menu entry, the plugin is installed correctly.
 
 ### Starting the Server
 
-0. Make sure you're device is connected to WiFi
+0. Make sure your device is connected to WiFi
 1. Open KOReader's top menu
 2. Navigate to **Network → FileSync**
 3. Tap **Start file server**
 4. A QR code will appear on screen with the connection URL
+
+<p align="center">
+  <img src="screenshots/menu.png" alt="FileSync menu in KOReader" width="350">
+  &nbsp;&nbsp;&nbsp;
+  <img src="screenshots/qr-screen.png" alt="QR code screen" width="350">
+</p>
 
 ### Connecting from Your Phone
 
@@ -103,6 +117,14 @@ Once connected, the web interface lets you:
 - **Create folders** — Tap the **Folder** button in the header and enter a name.
 - **Search** — Use the search bar to filter the current directory by filename.
 - **Sort** — Use the dropdown to sort by name, date, size, or type in ascending or descending order.
+
+<p align="center">
+  <img src="screenshots/web-home.png" alt="File browser - home" width="270">
+  &nbsp;&nbsp;
+  <img src="screenshots/web-directory.png" alt="File browser - directory with upload" width="270">
+  &nbsp;&nbsp;
+  <img src="screenshots/web-file-detail.png" alt="File detail view" width="270">
+</p>
 
 ### Stopping the Server
 

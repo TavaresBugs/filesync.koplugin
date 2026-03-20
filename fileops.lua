@@ -8,6 +8,13 @@ if not ok then
 end
 local logger = require("logger")
 
+local SAFE_MODE_EXTENSIONS = {
+    epub = true, pdf = true, mobi = true, azw = true, azw3 = true,
+    fb2 = true, ["fb2.zip"] = true, djvu = true, cbz = true, cbr = true, kfx = true,
+    txt = true, doc = true, docx = true, rtf = true,
+    html = true, htm = true, md = true, chm = true, pdb = true, prc = true, lit = true,
+}
+
 local FileOps = {
     _root_dir = "/mnt/us",
 }
@@ -155,8 +162,21 @@ function FileOps:_getFileType(filename)
     end
 end
 
+--- Check if a filename has a safe mode whitelisted extension
+function FileOps:isExtensionSafe(filename)
+    if not filename then return false end
+    -- Check compound extension first (e.g. "fb2.zip")
+    local compound_ext = filename:match("%.([^/]+%.[^%.]+)$")
+    if compound_ext and SAFE_MODE_EXTENSIONS[compound_ext:lower()] then
+        return true
+    end
+    local ext = filename:match("%.([^%.]+)$")
+    if not ext then return false end
+    return SAFE_MODE_EXTENSIONS[ext:lower()] == true
+end
+
 --- List directory contents
-function FileOps:listDirectory(rel_path, sort_by, sort_order, filter)
+function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
     local full_path, err = self:_resolvePath(rel_path)
     if not full_path then
         return nil, err
@@ -183,16 +203,22 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter)
                         local entry_path = full_path .. "/" .. name
                         local entry_attr = lfs.attributes(entry_path)
                         if entry_attr then
-                            local entry = {
-                                name = name,
-                                path = self:_getRelativePath(entry_path),
-                                is_dir = entry_attr.mode == "directory",
-                                size = entry_attr.size or 0,
-                                size_formatted = self:_formatSize(entry_attr.size or 0),
-                                modified = entry_attr.modification or 0,
-                                type = entry_attr.mode == "directory" and "directory" or self:_getFileType(name),
-                            }
-                            table.insert(entries, entry)
+                            local is_dir = entry_attr.mode == "directory"
+                            -- Apply safe mode filter: only dirs and whitelisted extensions
+                            if safe_mode and not is_dir and not self:isExtensionSafe(name) then
+                                -- skip non-whitelisted file
+                            else
+                                local entry = {
+                                    name = name,
+                                    path = self:_getRelativePath(entry_path),
+                                    is_dir = is_dir,
+                                    size = entry_attr.size or 0,
+                                    size_formatted = self:_formatSize(entry_attr.size or 0),
+                                    modified = entry_attr.modification or 0,
+                                    type = is_dir and "directory" or self:_getFileType(name),
+                                }
+                                table.insert(entries, entry)
+                            end
                         end
                     end
                 end

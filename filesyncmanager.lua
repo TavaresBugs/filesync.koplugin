@@ -28,6 +28,15 @@ function FileSyncManager:setPort(port)
     G_reader_settings:flush()
 end
 
+function FileSyncManager:getSafeMode()
+    return G_reader_settings:readSetting("filesync_safe_mode", true)
+end
+
+function FileSyncManager:setSafeMode(enabled)
+    G_reader_settings:saveSetting("filesync_safe_mode", enabled)
+    G_reader_settings:flush()
+end
+
 function FileSyncManager:configurePort()
     local InputDialog = require("ui/widget/inputdialog")
     local port_dialog

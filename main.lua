@@ -43,6 +43,18 @@ function FileSync:addToMainMenu(menu_items)
                 keep_menu_open = true,
             },
             {
+                text = _("Safe mode"),
+                checked_func = function()
+                    local FileSyncManager = require("filesyncmanager")
+                    return FileSyncManager:getSafeMode()
+                end,
+                callback = function()
+                    local FileSyncManager = require("filesyncmanager")
+                    FileSyncManager:setSafeMode(not FileSyncManager:getSafeMode())
+                end,
+                keep_menu_open = true,
+            },
+            {
                 text = _("Show QR code"),
                 enabled_func = function()
                     local FileSyncManager = require("filesyncmanager")

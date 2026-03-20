@@ -192,6 +192,8 @@ function HttpServer:_route(client, method, path, query, headers, body)
     -- API routes
     if path:match("^/api/") then
         local FileOps = self._fileops
+        local FileSyncManager = require("filesyncmanager")
+        local safe_mode = FileSyncManager:getSafeMode()
 
         -- Health check endpoint for debugging
         if method == "GET" and path == "/api/health" then
@@ -213,6 +215,14 @@ function HttpServer:_route(client, method, path, query, headers, body)
             if not file_path then
                 self:_sendJSON(client, 400, {error = "Missing path parameter"})
                 return
+            end
+            -- Block non-whitelisted files in safe mode
+            if safe_mode then
+                local filename = file_path:match("([^/]+)$")
+                if filename and not FileOps:isExtensionSafe(filename) then
+                    self:_sendJSON(client, 403, {error = "Access denied: file type not allowed in safe mode"})
+                    return
+                end
             end
             local result, err_msg = FileOps:getMetadata(file_path)
             if result then
@@ -237,7 +247,7 @@ function HttpServer:_route(client, method, path, query, headers, body)
             local sort_by = query.sort or "name"
             local sort_order = query.order or "asc"
             local filter = query.filter or ""
-            local result, err_msg = FileOps:listDirectory(dir, sort_by, sort_order, filter)
+            local result, err_msg = FileOps:listDirectory(dir, sort_by, sort_order, filter, safe_mode)
             if result then
                 self:_sendJSON(client, 200, result)
             else
@@ -249,6 +259,14 @@ function HttpServer:_route(client, method, path, query, headers, body)
             if not file_path then
                 self:_sendJSON(client, 400, {error = "Missing path parameter"})
                 return
+            end
+            -- Block non-whitelisted files in safe mode
+            if safe_mode then
+                local filename = file_path:match("([^/]+)$")
+                if filename and not FileOps:isExtensionSafe(filename) then
+                    self:_sendJSON(client, 403, {error = "Access denied: file type not allowed in safe mode"})
+                    return
+                end
             end
             local ok, err_msg = FileOps:downloadFile(client, file_path, self)
             if not ok then
@@ -379,6 +397,7 @@ function HttpServer:_sendJSON(client, status, data)
     local status_text = ({
         [200] = "OK",
         [400] = "Bad Request",
+        [403] = "Forbidden",
         [404] = "Not Found",
         [500] = "Internal Server Error",
     })[status] or "OK"

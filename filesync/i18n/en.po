@@ -21,6 +21,9 @@ msgstr ""
 msgid "Start file server"
 msgstr ""
 
+msgid "Server status"
+msgstr ""
+
 msgid "Server port"
 msgstr ""
 

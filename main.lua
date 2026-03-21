@@ -15,12 +15,9 @@ function FileSync:addToMainMenu(menu_items)
     local FileSyncManager = require("filesync/filesyncmanager")
     local sub_items = {
         {
-            text_func = function()
-                if FileSyncManager:isRunning() then
-                    return _("Stop file server")
-                else
-                    return _("Start file server")
-                end
+            text = _("Server status"),
+            checked_func = function()
+                return FileSyncManager:isRunning()
             end,
             callback = function()
                 if FileSyncManager:isRunning() then
@@ -35,16 +32,6 @@ function FileSync:addToMainMenu(menu_items)
             text = _("Server port"),
             callback = function()
                 FileSyncManager:configurePort()
-            end,
-            keep_menu_open = true,
-        },
-        {
-            text = _("Safe mode"),
-            checked_func = function()
-                return FileSyncManager:getSafeMode()
-            end,
-            callback = function()
-                FileSyncManager:setSafeMode(not FileSyncManager:getSafeMode())
             end,
             keep_menu_open = true,
         },

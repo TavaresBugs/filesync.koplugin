@@ -20,6 +20,9 @@ msgstr "Detener servidor de archivos"
 msgid "Start file server"
 msgstr "Iniciar servidor de archivos"
 
+msgid "Server status"
+msgstr "Estado del servidor"
+
 msgid "Server port"
 msgstr "Puerto del servidor"
 

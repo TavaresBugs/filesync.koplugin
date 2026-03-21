@@ -326,12 +326,39 @@ function HttpServer:_route(client, method, path, query, headers, body)
                 self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})
             end
 
+        elseif method == "POST" and path == "/api/move" then
+            local data = self:_parseJSON(body)
+            if data and data.old_path and data.new_path then
+                local ok, err_msg = FileOps:move(data.old_path, data.new_path)
+                if ok then
+                    self:_sendJSON(client, 200, {success = true})
+                else
+                    self:_sendJSON(client, 400, {error = err_msg or "Cannot move"})
+                end
+            else
+                self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})
+            end
+
+        elseif method == "POST" and path == "/api/copy" then
+            local data = self:_parseJSON(body)
+            if data and data.old_path and data.new_path then
+                local ok, err_msg = FileOps:copyFile(data.old_path, data.new_path)
+                if ok then
+                    self:_sendJSON(client, 200, {success = true})
+                else
+                    self:_sendJSON(client, 400, {error = err_msg or "Cannot copy"})
+                end
+            else
+                self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})
+            end
+
         elseif method == "POST" and path == "/api/delete" then
             local data = self:_parseJSON(body)
             if data and data.path then
                 local delete_options = {
                     safe_mode = safe_mode,
                     delete_sdr = data.delete_sdr == true,
+                    recursive = data.recursive == true,
                 }
                 local ok, err_msg = FileOps:delete(data.path, delete_options)
                 if ok then

@@ -84,5 +84,8 @@ msgstr ""
 msgid "Server running in the background. Stop the server to save battery."
 msgstr ""
 
+msgid "Failed to open QR screen:\n%1"
+msgstr ""
+
 msgid "Image preview"
 msgstr ""

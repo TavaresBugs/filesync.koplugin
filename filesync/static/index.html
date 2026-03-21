@@ -544,14 +544,26 @@ html, body {
 }
 
 .dropzone-text {
-    font-size: 14px;
-    color: var(--text-secondary);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
 
-.dropzone-text strong {
-    color: var(--primary);
-    cursor: pointer;
+.dropzone-text-primary {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.dropzone-text-secondary {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+}
+
+.dropzone-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
 .dropzone-cta {
@@ -582,6 +594,18 @@ html, body {
     transform: translateY(0);
 }
 
+.dropzone-cta.secondary {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: none;
+}
+
+.dropzone-cta.secondary:hover {
+    background: var(--surface-hover);
+    box-shadow: var(--shadow);
+}
+
 .dropzone-cta-icon {
     width: 28px;
     height: 28px;
@@ -599,10 +623,26 @@ html, body {
     stroke: currentColor;
 }
 
+.dropzone-cta.secondary .dropzone-cta-icon {
+    background: rgba(59, 130, 246, 0.08);
+    color: var(--primary);
+}
+
 .dropzone-cta-label {
     display: block;
     transform: translateY(-0.5px);
     white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+    .dropzone-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .dropzone-cta {
+        width: 100%;
+    }
 }
 
 /* ===== Upload Progress ===== */
@@ -1212,18 +1252,30 @@ html, body {
             <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         <div class="dropzone-text" id="dropzoneText">
-            Drag and drop files here, or <strong onclick="document.getElementById('fileInput').click()">browse</strong>
+            <div class="dropzone-text-primary" id="dropzoneTextPrimary" data-i18n="dropzone_text_primary">Drag and drop files or folders here</div>
+            <div class="dropzone-text-secondary" id="dropzoneTextSecondary" data-i18n="dropzone_text_secondary">or choose an option below</div>
         </div>
         <input type="file" id="fileInput" multiple style="display:none" onchange="handleFileSelect(this.files)">
-        <button class="dropzone-cta" onclick="document.getElementById('fileInput').click()">
-            <span class="dropzone-cta-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-            </span>
-            <span class="dropzone-cta-label" data-i18n="choose_files">Choose Files</span>
-        </button>
+        <input type="file" id="folderInput" webkitdirectory directory mozdirectory multiple style="display:none" onchange="handleFolderSelect(this.files)">
+        <div class="dropzone-actions">
+            <button class="dropzone-cta" id="btnUploadFilesCta" onclick="document.getElementById('fileInput').click()">
+                <span class="dropzone-cta-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                </span>
+                <span class="dropzone-cta-label" data-i18n="upload_files_cta">Upload files</span>
+            </button>
+            <button class="dropzone-cta secondary" id="btnUploadFolderCta" onclick="document.getElementById('folderInput').click()">
+                <span class="dropzone-cta-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                </span>
+                <span class="dropzone-cta-label" data-i18n="upload_folder_cta">Upload folder</span>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -1353,9 +1405,10 @@ html, body {
             sort_largest: "Largest first",
             sort_smallest: "Smallest first",
             sort_type: "Type",
-            dropzone_text: "Drag and drop files here, or",
-            dropzone_browse: "browse",
-            choose_files: "Choose Files",
+            dropzone_text_primary: "Drag and drop files or folders here",
+            dropzone_text_secondary: "or choose an option below",
+            upload_files_cta: "Upload files",
+            upload_folder_cta: "Upload folder",
             loading: "Loading...",
             failed_to_load: "Failed to load files",
             empty_folder: "This folder is empty",
@@ -1432,9 +1485,10 @@ html, body {
             sort_largest: "M\u00e1s grandes",
             sort_smallest: "M\u00e1s peque\u00f1os",
             sort_type: "Tipo",
-            dropzone_text: "Arrastra archivos aqu\u00ed, o",
-            dropzone_browse: "busca",
-            choose_files: "Elegir archivos",
+            dropzone_text_primary: "Arrastra archivos o carpetas aqu\u00ed",
+            dropzone_text_secondary: "o elige una opci\u00f3n abajo",
+            upload_files_cta: "Subir archivos",
+            upload_folder_cta: "Subir carpeta",
             loading: "Cargando...",
             failed_to_load: "Error al cargar archivos",
             empty_folder: "Esta carpeta est\u00e1 vac\u00eda",
@@ -1511,9 +1565,10 @@ html, body {
             sort_largest: "Maiores primeiro",
             sort_smallest: "Menores primeiro",
             sort_type: "Tipo",
-            dropzone_text: "Arraste e solte arquivos aqui ou",
-            dropzone_browse: "procure",
-            choose_files: "Escolher arquivos",
+            dropzone_text_primary: "Arraste e solte arquivos ou pastas aqui",
+            dropzone_text_secondary: "ou escolha uma op\u00e7\u00e3o abaixo",
+            upload_files_cta: "Enviar arquivos",
+            upload_folder_cta: "Enviar pasta",
             loading: "Carregando...",
             failed_to_load: "Falha ao carregar arquivos",
             empty_folder: "Esta pasta est\u00e1 vazia",
@@ -1667,9 +1722,10 @@ html, body {
         document.getElementById('btnSelectionCut').title = t('cut');
         document.getElementById('btnSelectionDelete').title = t('delete_label');
         document.getElementById('btnSelectionCancel').title = t('cancel');
-        // Dropzone text
-        var dzText = document.getElementById('dropzoneText');
-        dzText.innerHTML = t('dropzone_text') + ' <strong onclick="document.getElementById(\'fileInput\').click()">' + t('dropzone_browse') + '</strong>';
+        document.getElementById('btnUploadFilesCta').title = t('upload_files_cta');
+        document.getElementById('btnUploadFilesCta').setAttribute('aria-label', t('upload_files_cta'));
+        document.getElementById('btnUploadFolderCta').title = t('upload_folder_cta');
+        document.getElementById('btnUploadFolderCta').setAttribute('aria-label', t('upload_folder_cta'));
         // Modal default buttons
         document.getElementById('modalCancelBtn').textContent = t('cancel');
         document.getElementById('confirmCancelBtn').textContent = t('cancel');
@@ -2515,12 +2571,21 @@ html, body {
         document.getElementById('dropzone').classList.toggle('visible', uploadZoneVisible);
     };
 
-    window.handleFileSelect = function(files) {
+    function processSelectedUploads(files) {
         if (!files || files.length === 0) return;
         for (var fi = 0; fi < files.length; fi++) {
             uploadFile(files[fi]);
         }
+    }
+
+    window.handleFileSelect = function(files) {
+        processSelectedUploads(files);
         document.getElementById('fileInput').value = '';
+    };
+
+    window.handleFolderSelect = function(files) {
+        processSelectedUploads(files);
+        document.getElementById('folderInput').value = '';
     };
 
     async function uploadFile(file) {

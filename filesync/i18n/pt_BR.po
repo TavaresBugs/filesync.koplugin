@@ -88,5 +88,8 @@ msgstr "Parando servidor..."
 msgid "Server running in the background. Stop the server to save battery."
 msgstr "Servidor em execução em segundo plano. Pare o servidor para economizar bateria."
 
+msgid "Failed to open QR screen:\n%1"
+msgstr "Não foi possível abrir a tela do QR code:\n%1"
+
 msgid "Image preview"
 msgstr "Prévia de imagem"

@@ -321,6 +321,13 @@ function FileSyncManager:closeQRScreen()
     end
 end
 
+function FileSyncManager:_showQRCodeOpenError(err)
+    logger.err("FileSync: Failed to open QR screen:", err)
+    UIManager:show(InfoMessage:new{
+        text = T(_("Failed to open QR screen:\n%1"), tostring(err)),
+    })
+end
+
 function FileSyncManager:showQRCode()
     if not self._running or not self._ip then
         UIManager:show(InfoMessage:new{
@@ -330,214 +337,223 @@ function FileSyncManager:showQRCode()
         return
     end
 
-    -- Close any existing QR screen first
-    self:closeQRScreen()
+    local ok, err = pcall(function()
+        self:closeQRScreen()
 
-    local url = "http://" .. self._ip .. ":" .. self._port
-    local screen_width = Screen:getWidth()
-    local screen_height = Screen:getHeight()
+        local url = "http://" .. self._ip .. ":" .. self._port
+        local screen_width = Screen:getWidth()
+        local screen_height = Screen:getHeight()
+        local full_screen_dimen = Geom:new{ x = 0, y = 0, w = screen_width, h = screen_height }
 
-    -- Build the QR code widget
-    local qr_size = Screen:scaleBySize(260)
-    local qr_widget = QRWidget:new{
-        text = url,
-        width = qr_size,
-        height = qr_size,
-    }
+        local qr_size = Screen:scaleBySize(260)
+        local qr_widget = QRWidget:new{
+            text = url,
+            width = qr_size,
+            height = qr_size,
+        }
 
-    -- Icon + Title row
-    local icon_dir = debug.getinfo(1, "S").source:match("@(.+)"):match("(.*/)")
-    local icon_size = Screen:scaleBySize(36)
-    local icon_widget = ImageWidget:new{
-        file = icon_dir .. "icon.png",
-        width = icon_size,
-        height = icon_size,
-        alpha = true,
-    }
-    local title_text = TextWidget:new{
-        text = _("FileSync"),
-        face = Font:getFace("infofont", 48),
-        bold = true,
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-    local title_widget = HorizontalGroup:new{
-        align = "center",
-        icon_widget,
-        HorizontalSpan:new{ width = Screen:scaleBySize(10) },
-        title_text,
-    }
+        local title_text = TextWidget:new{
+            text = _("FileSync"),
+            face = Font:getFace("infofont", 34),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local title_widget = title_text
 
-    -- URL text
-    local url_widget = TextWidget:new{
-        text = url,
-        face = Font:getFace("infofont", 22),
-        fgcolor = Blitbuffer.COLOR_BLACK,
-        max_width = screen_width - Screen:scaleBySize(40),
-    }
+        local source = debug.getinfo(1, "S").source or ""
+        local icon_dir = source:match("@(.*/)") or ""
+        if icon_dir ~= "" then
+            local icon_size = Screen:scaleBySize(46)
+            local ok_icon, icon_widget = pcall(function()
+                return ImageWidget:new{
+                    file = icon_dir .. "icon.png",
+                    width = icon_size,
+                    height = icon_size,
+                    alpha = true,
+                }
+            end)
+            if ok_icon and icon_widget then
+                title_widget = HorizontalGroup:new{
+                    align = "center",
+                    icon_widget,
+                    HorizontalSpan:new{ width = Screen:scaleBySize(8) },
+                    title_text,
+                }
+            else
+                logger.warn("FileSync: Failed to load QR header icon:", icon_widget)
+            end
+        end
 
-    -- Instructions text
-    local instructions_widget = TextBoxWidget:new{
-        text = _("Scan the QR code or enter the URL\nin your browser.\n\nBoth devices must be on the same WiFi network."),
-        face = Font:getFace("smallinfofont", 20),
-        width = screen_width * 0.65,
-        alignment = "center",
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
+        local url_widget = TextWidget:new{
+            text = url,
+            face = Font:getFace("infofont", 22),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            max_width = screen_width - Screen:scaleBySize(40),
+        }
 
-    -- Stop Server button
-    local button_text = TextWidget:new{
-        text = _("Stop Server"),
-        face = Font:getFace("infofont", 20),
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-    local stop_button = FrameContainer:new{
-        bordersize = Size.border.button,
-        radius = Size.radius.button,
-        padding = Screen:scaleBySize(10),
-        padding_left = Screen:scaleBySize(30),
-        padding_right = Screen:scaleBySize(30),
-        background = Blitbuffer.COLOR_WHITE,
-        button_text,
-    }
+        local instructions_widget = TextBoxWidget:new{
+            text = _("Scan the QR code or enter the URL\nin your browser.\n\nBoth devices must be on the same WiFi network."),
+            face = Font:getFace("smallinfofont", 20),
+            width = math.floor(screen_width * 0.65),
+            alignment = "center",
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
 
-    -- Vertical layout
-    local vertical_content = VerticalGroup:new{
-        align = "center",
-        VerticalSpan:new{ width = Screen:scaleBySize(40) },
-        title_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(30) },
-        qr_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(20) },
-        url_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(15) },
-        instructions_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(30) },
-        stop_button,
-    }
+        local button_text = TextWidget:new{
+            text = _("Stop Server"),
+            face = Font:getFace("infofont", 20),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local stop_button = FrameContainer:new{
+            bordersize = Size.border.button,
+            radius = Size.radius.button,
+            padding = Screen:scaleBySize(10),
+            padding_left = Screen:scaleBySize(30),
+            padding_right = Screen:scaleBySize(30),
+            background = Blitbuffer.COLOR_WHITE,
+            button_text,
+        }
 
-    -- X (close) button in the top-right corner
-    local close_button_text = TextWidget:new{
-        text = "\u{00D7}", -- multiplication sign as X
-        face = Font:getFace("infofont", 32),
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-    local close_button = FrameContainer:new{
-        bordersize = Size.border.button,
-        radius = Size.radius.button,
-        padding = Screen:scaleBySize(6),
-        padding_left = Screen:scaleBySize(12),
-        padding_right = Screen:scaleBySize(12),
-        background = Blitbuffer.COLOR_WHITE,
-        close_button_text,
-    }
-    local close_button_row = RightContainer:new{
-        dimen = { w = screen_width - Screen:scaleBySize(10), h = close_button:getSize().h + Screen:scaleBySize(10) },
-        FrameContainer:new{
+        local close_button_box_size = Screen:scaleBySize(40)
+        local close_button_text = TextWidget:new{
+            text = "\u{00D7}",
+            face = Font:getFace("infofont", 30),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local close_button = FrameContainer:new{
+            bordersize = Size.border.button,
+            radius = Screen:scaleBySize(8),
+            padding = 0,
+            background = Blitbuffer.COLOR_WHITE,
+            CenterContainer:new{
+                dimen = Geom:new{
+                    w = close_button_box_size,
+                    h = close_button_box_size,
+                },
+                close_button_text,
+            },
+        }
+
+        local vertical_content = VerticalGroup:new{
+            align = "center",
+            VerticalSpan:new{ width = Screen:scaleBySize(40) },
+            title_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(30) },
+            qr_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(20) },
+            url_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(15) },
+            instructions_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(30) },
+            stop_button,
+        }
+
+        local close_button_row = RightContainer:new{
+            dimen = Geom:new{
+                x = 0,
+                y = 0,
+                w = screen_width - Screen:scaleBySize(10),
+                h = close_button_box_size + Screen:scaleBySize(10),
+            },
+            FrameContainer:new{
+                bordersize = 0,
+                padding = 0,
+                padding_top = Screen:scaleBySize(10),
+                padding_right = Screen:scaleBySize(10),
+                background = Blitbuffer.COLOR_WHITE,
+                close_button,
+            },
+        }
+
+        local centered_content = CenterContainer:new{
+            dimen = full_screen_dimen,
+            vertical_content,
+        }
+
+        local overlap = OverlapGroup:new{
+            dimen = full_screen_dimen,
+            centered_content,
+            close_button_row,
+        }
+
+        local frame = FrameContainer:new{
+            width = screen_width,
+            height = screen_height,
             bordersize = 0,
             padding = 0,
-            padding_top = Screen:scaleBySize(10),
-            padding_right = Screen:scaleBySize(10),
+            margin = 0,
             background = Blitbuffer.COLOR_WHITE,
-            close_button,
-        },
-    }
+            overlap,
+        }
 
-    -- Center everything on screen
-    local centered_content = CenterContainer:new{
-        dimen = { w = screen_width, h = screen_height },
-        vertical_content,
-    }
+        local widget = InputContainer:new{
+            dimen = full_screen_dimen,
+            width = screen_width,
+            height = screen_height,
+        }
+        widget[1] = frame
+        widget._stop_button = stop_button
+        widget._close_button = close_button
+        widget._manager = self
 
-    -- Layer the close button on top of centered content using OverlapGroup
-    local overlap = OverlapGroup:new{
-        dimen = { w = screen_width, h = screen_height },
-        centered_content,
-        close_button_row,
-    }
-
-    -- Full-screen white background container
-    local frame = FrameContainer:new{
-        width = screen_width,
-        height = screen_height,
-        bordersize = 0,
-        padding = 0,
-        margin = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        overlap,
-    }
-
-    -- Build the InputContainer for handling taps
-    local widget = InputContainer:new{
-        width = screen_width,
-        height = screen_height,
-    }
-    widget[1] = frame
-
-    -- Store button references for hit testing
-    widget._stop_button = stop_button
-    widget._close_button = close_button
-    widget._manager = self
-
-    widget.ges_events = {
-        Tap = {
-            GestureRange:new{
-                ges = "tap",
-                range = Geom:new{ x = 0, y = 0, w = screen_width, h = screen_height },
+        widget.ges_events = {
+            Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = full_screen_dimen,
+                },
             },
-        },
-    }
+        }
 
-    function widget:onTap(_event, ges)
-        if not ges then return true end
-        local x, y = ges.pos.x, ges.pos.y
+        function widget:onTap(_event, ges)
+            if not ges then return true end
+            local x, y = ges.pos.x, ges.pos.y
 
-        -- Check if the tap is on the Stop Server button
-        local btn = self._stop_button
-        if btn.dimen then
-            if x >= btn.dimen.x and x <= btn.dimen.x + btn.dimen.w
-               and y >= btn.dimen.y and y <= btn.dimen.y + btn.dimen.h then
-                -- Stop button tapped: show feedback, then stop and restart
-                self._manager:closeQRScreen()
-                UIManager:show(InfoMessage:new{
-                    text = _("Stopping server..."),
-                    timeout = 2,
-                })
-                -- Schedule the actual stop+restart after a brief moment so the
-                -- InfoMessage renders on the e-ink screen before the restart
-                UIManager:scheduleIn(0.5, function()
-                    self._manager:stop(true)
-                    UIManager:restartKOReader()
-                end)
-                return true
+            local stop_btn = self._stop_button
+            if stop_btn and stop_btn.dimen then
+                if x >= stop_btn.dimen.x and x <= stop_btn.dimen.x + stop_btn.dimen.w
+                   and y >= stop_btn.dimen.y and y <= stop_btn.dimen.y + stop_btn.dimen.h then
+                    self._manager:closeQRScreen()
+                    UIManager:show(InfoMessage:new{
+                        text = _("Stopping server..."),
+                        timeout = 2,
+                    })
+                    UIManager:scheduleIn(0.5, function()
+                        self._manager:stop(true)
+                        UIManager:restartKOReader()
+                    end)
+                    return true
+                end
             end
+
+            local close_btn = self._close_button
+            if close_btn and close_btn.dimen then
+                if x >= close_btn.dimen.x and x <= close_btn.dimen.x + close_btn.dimen.w
+                   and y >= close_btn.dimen.y and y <= close_btn.dimen.y + close_btn.dimen.h then
+                    self._manager:closeQRScreen()
+                    UIManager:show(InfoMessage:new{
+                        text = _("Server running in the background. Stop the server to save battery."),
+                        timeout = 4,
+                    })
+                    return true
+                end
+            end
+
+            return true
         end
 
-        -- Check if the tap is on the X close button
-        local close_btn = self._close_button
-        if close_btn.dimen then
-            if x >= close_btn.dimen.x and x <= close_btn.dimen.x + close_btn.dimen.w
-               and y >= close_btn.dimen.y and y <= close_btn.dimen.y + close_btn.dimen.h then
-                -- X button tapped: dismiss QR screen, show info, keep server running
-                self._manager:closeQRScreen()
-                UIManager:show(InfoMessage:new{
-                    text = _("Server running in the background. Stop the server to save battery."),
-                    timeout = 4,
-                })
-                return true
-            end
+        function widget:onClose()
+            return true
         end
 
-        -- Tap anywhere else: do nothing (no dismiss)
-        return true
-    end
+        self._qr_widget = widget
+        UIManager:show(widget, "full")
+    end)
 
-    function widget:onClose()
-        -- Only dismiss via X button, not via generic close/back key
-        return true
+    if not ok then
+        self._qr_widget = nil
+        self:_showQRCodeOpenError(err)
     end
-
-    self._qr_widget = widget
-    UIManager:show(widget, "full")
 end
 
 function FileSyncManager:openKindleFirewall(port)

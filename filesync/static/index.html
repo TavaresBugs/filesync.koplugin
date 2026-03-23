@@ -110,8 +110,8 @@
     --selection-close-bg: #1f2937;
     --selection-close-color: #fff;
     --layout-max-width: 920px;
-    --file-table-columns: 44px minmax(0, 1fr) 100px 128px 80px 96px;
-    --file-table-columns-selection: 24px 44px minmax(0, 1fr) 100px 128px 80px 96px;
+    --file-table-columns: 44px minmax(0, 1fr) 90px 110px 80px 96px;
+    --file-table-columns-selection: 24px 44px minmax(0, 1fr) 90px 110px 80px 96px;
     --overlay-backdrop: rgba(0, 0, 0, 0.5);
     --root-overlay-backdrop: rgba(15, 23, 42, 0.56);
     --root-modal-surface: #fff;
@@ -218,8 +218,8 @@
     --selection-action-danger-hover-bg: rgba(118, 48, 57, 0.98);
     --selection-close-bg: #0f172a;
     --selection-close-color: #f8fafc;
-    --file-table-columns: 44px minmax(0, 1fr) 100px 128px 80px 96px;
-    --file-table-columns-selection: 24px 44px minmax(0, 1fr) 100px 128px 80px 96px;
+    --file-table-columns: 44px minmax(0, 1fr) 90px 110px 80px 96px;
+    --file-table-columns-selection: 24px 44px minmax(0, 1fr) 90px 110px 80px 96px;
     --overlay-backdrop: rgba(2, 6, 23, 0.72);
     --root-overlay-backdrop: rgba(2, 6, 23, 0.76);
     --root-modal-surface: #171f29;
@@ -319,8 +319,8 @@
         --selection-action-danger-hover-bg: rgba(118, 48, 57, 0.98);
         --selection-close-bg: #0f172a;
         --selection-close-color: #f8fafc;
-        --file-table-columns: 44px minmax(0, 1fr) 100px 128px 80px 96px;
-        --file-table-columns-selection: 24px 44px minmax(0, 1fr) 100px 128px 80px 96px;
+        --file-table-columns: 44px minmax(0, 1fr) 90px 110px 80px 96px;
+        --file-table-columns-selection: 24px 44px minmax(0, 1fr) 90px 110px 80px 96px;
         --overlay-backdrop: rgba(2, 6, 23, 0.72);
         --root-overlay-backdrop: rgba(2, 6, 23, 0.76);
         --root-modal-surface: #171f29;
@@ -978,9 +978,10 @@ html, body {
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
     grid-template-areas:
         "main"
-        "actions actions";
+        "actions";
     align-items: start;
     gap: 10px;
     min-height: 132px;
@@ -1017,10 +1018,12 @@ html, body {
 }
 
 .file-list.view-grid .file-name {
-    white-space: normal;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
     line-height: 1.35;
 }
 
@@ -1367,7 +1370,7 @@ html, body {
 
     .file-list-header-cell.size {
         grid-column: 3;
-        text-align: right;
+        text-align: center;
     }
 
     body.selection-mode-active .file-list-header-cell.size {
@@ -1376,7 +1379,7 @@ html, body {
 
     .file-list-header-cell.modified {
         grid-column: 4;
-        text-align: right;
+        text-align: center;
     }
 
     body.selection-mode-active .file-list-header-cell.modified {
@@ -1385,7 +1388,7 @@ html, body {
 
     .file-list-header-cell.type {
         grid-column: 5;
-        text-align: right;
+        text-align: center;
     }
 
     body.selection-mode-active .file-list-header-cell.type {
@@ -1413,7 +1416,7 @@ html, body {
     .file-list-header-cell.size .file-list-header-button,
     .file-list-header-cell.modified .file-list-header-button,
     .file-list-header-cell.type .file-list-header-button {
-        justify-content: flex-end;
+        justify-content: center;
     }
 
     .file-list-header-button::after {
@@ -1489,6 +1492,7 @@ html, body {
         grid-column: 2;
         align-self: center;
         min-width: 0;
+        padding-right: 8px;
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-info {
@@ -1498,6 +1502,13 @@ html, body {
     .file-list:not(.view-grid):not(.view-grid-large) .file-name {
         font-size: 15px;
         font-weight: 600;
+        white-space: normal;
+        overflow: hidden;
+        text-overflow: clip;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-height: 1.35;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-meta {
@@ -1516,7 +1527,7 @@ html, body {
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-table-size {
         grid-column: 3;
-        text-align: right;
+        text-align: center;
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-size {
@@ -1525,7 +1536,7 @@ html, body {
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-table-date {
         grid-column: 4;
-        text-align: right;
+        text-align: center;
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-date {
@@ -1534,7 +1545,7 @@ html, body {
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-table-type {
         grid-column: 5;
-        text-align: right;
+        text-align: center;
         font-weight: 600;
         color: var(--text);
     }
@@ -3128,10 +3139,10 @@ html, body {
                     <span class="mode-toggle-label" data-i18n="secure_mode">Secure</span>
                 </button>
                 <button class="mode-toggle-btn root" type="button" id="btnRootMode" onclick="requestRootMode()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 3.25l6.25 2.55v4.85c0 4.2-2.75 7.28-6.25 8.95-3.5-1.67-6.25-4.75-6.25-8.95V5.8L12 3.25z"/>
-                        <rect x="8.7" y="10.8" width="6.6" height="5.6" rx="1.1"/>
-                        <path d="M10.35 10.8V9.45a1.65 1.65 0 013.3 0v1.35"/>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 2.8L18.4 5.4V11.6C18.4 16.6 15.2 19.8 12 21.2C8.8 19.8 5.6 16.6 5.6 11.6V5.4Z"/>
+                        <rect x="9.2" y="12.4" width="5.6" height="4.5" rx="1.1"/>
+                        <path d="M10.5 12.4V10.9a1.5 1.5 0 013 0V12.4"/>
                     </svg>
                     <span class="mode-toggle-label" data-i18n="root_mode">Root</span>
                 </button>
@@ -3408,10 +3419,10 @@ html, body {
 <div id="rootPinOverlay" onclick="closeRootPinOverlay(event)">
     <div id="rootPinModal" onclick="focusRootPinInput(); event.stopPropagation();">
         <div class="root-pin-badge" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3.25l6.25 2.55v4.85c0 4.2-2.75 7.28-6.25 8.95-3.5-1.67-6.25-4.75-6.25-8.95V5.8L12 3.25z"/>
-                <rect x="8.7" y="10.8" width="6.6" height="5.6" rx="1.1"/>
-                <path d="M10.35 10.8V9.45a1.65 1.65 0 013.3 0v1.35"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.8L18.4 5.4V11.6C18.4 16.6 15.2 19.8 12 21.2C8.8 19.8 5.6 16.6 5.6 11.6V5.4Z"/>
+                <rect x="9.2" y="12.4" width="5.6" height="4.5" rx="1.1"/>
+                <path d="M10.5 12.4V10.9a1.5 1.5 0 013 0V12.4"/>
             </svg>
         </div>
         <div class="root-pin-title" id="rootPinTitle"></div>
@@ -4091,12 +4102,12 @@ html, body {
     var icons = {
         dir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/></svg>',
         ebook: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
-        pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.2h6.1L18.8 8v11.2a1.8 1.8 0 01-1.8 1.8H8a1.8 1.8 0 01-1.8-1.8V5A1.8 1.8 0 018 3.2z"/><path d="M14.1 3.2V8h4.7"/><path d="M7.9 18.6h8.2"/><path d="M8.6 14.8v-2.9h1.1a.95.95 0 010 1.9H8.6"/><path d="M11.6 14.8v-2.9h.86a1.45 1.45 0 010 2.9h-.86"/><path d="M14.8 14.8v-2.9h1.8"/></svg>',
+        pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8.5L19 6.5V20a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" fill="currentColor" fill-opacity="0.13" stroke="currentColor"/><path d="M14 2v5h5"/><text x="5" y="17" font-family="system-ui,sans-serif" font-size="5.2" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.3">PDF</text></svg>',
         reader: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2"/><path d="M9 6.5h6"/><path d="M9 16.5h6"/><path d="M12 19h.01"/></svg>',
         comic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M13 4v16"/><path d="M3 10h18"/></svg>',
         document: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
-        text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8"/><path d="M8 17h6"/><path d="M8 9h4"/></svg>',
-        markdown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.95" stroke-linecap="round" stroke-linejoin="round"><rect x="4.3" y="6.2" width="15.4" height="11.6" rx="2.2"/><path d="M7.3 14.8v-5l2 2.2 2-2.2v5"/><path d="M14.3 10.4v4.3"/><path d="M12.9 13.3l1.4 1.4 1.4-1.4"/><path d="M16.9 10.4v4.3"/></svg>',
+        text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="3" fill="currentColor" fill-opacity="0.13" stroke="currentColor"/><path d="M7 8.2h10"/><text x="4.25" y="16.1" font-family="system-ui,sans-serif" font-size="6.1" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.25">TXT</text></svg>',
+        markdown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="3" fill="currentColor" fill-opacity="0.13" stroke="currentColor"/><text x="4.4" y="15.8" font-family="system-ui,sans-serif" font-size="7.4" font-weight="800" fill="currentColor" stroke="none">M↓</text></svg>',
         image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
         archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8"/><path d="M1 8h22"/><path d="M10 12h4"/><path d="M10 16h4"/><path d="M9 3h6v5H9z"/></svg>',
         audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>',
@@ -4961,6 +4972,7 @@ html, body {
             var extMatch = entry.name.match(/\.([^.]+)$/);
             var ext = extMatch ? extMatch[1].toUpperCase() : t('unknown');
             var typeLabel = entry.is_dir ? t('folder_label') : ext;
+            var tableTypeLabel = entry.is_dir ? t('folder_label') : (extMatch ? '.' + extMatch[1].toLowerCase() : '—');
             var isSelected = selectedPaths.indexOf(entry.path) !== -1;
             var itemClass = 'file-item ' + (entry.is_dir ? 'is-dir' : 'is-file');
             if (entry.name && entry.name.charAt(0) === '.') itemClass += ' is-hidden';
@@ -4987,7 +4999,7 @@ html, body {
             html += '</div>';
             html += '<div class="file-table-cell file-table-size">' + escapeHtml(tableSize) + '</div>';
             html += '<div class="file-table-cell file-table-date">' + escapeHtml(tableDate) + '</div>';
-            html += '<div class="file-table-cell file-table-type">' + escapeHtml(typeLabel) + '</div>';
+            html += '<div class="file-table-cell file-table-type">' + escapeHtml(tableTypeLabel) + '</div>';
             if (entry.is_dir) {
                 html += '<div class="file-actions">';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); renameItem(\'' + escapeAttr(entry.path) + '\', \'' + escapeAttr(entry.name) + '\')" title="' + escapeHtml(t('rename')) + '">' + icons.rename + '</button>';

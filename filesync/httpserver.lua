@@ -632,8 +632,15 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
         return
     end
 
-    -- Serve static files
-    if method == "GET" and (path == "/" or path == "/index.html") then
+    -- Serve the SPA entrypoint for the root page and clean navigation routes.
+    if method == "GET" and (
+        path == "/"
+        or path == "/index.html"
+        or path == "/files"
+        or path == "/system"
+        or path:match("^/files/")
+        or path:match("^/system/")
+    ) then
         self:_serveIndex(client)
         return
     end
@@ -880,7 +887,7 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
             if content_type:match("multipart/form%-data") then
                 local boundary = content_type:match("boundary=([^\r\n;]+)")
                 if boundary then
-                    local ok, err_msg = FileOps:handleUpload(dir, body, boundary, file_options)
+                    local ok, err_msg, err_details = FileOps:handleUpload(dir, body, boundary, file_options)
                     if ok then
                         self:_sendJSON(client, 200, {success = true, message = "Upload complete"})
                     elseif err_msg == "Root mode required for this file type" then
@@ -889,7 +896,13 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
                             code = "root_required_upload",
                         })
                     else
-                        self:_sendJSON(client, 400, {error = err_msg or "Upload failed"})
+                        local payload = {error = err_msg or "Upload failed"}
+                        if err_details then
+                            for key, value in pairs(err_details) do
+                                payload[key] = value
+                            end
+                        end
+                        self:_sendJSON(client, err_details and err_details.code == "destination_exists" and 409 or 400, payload)
                     end
                 else
                     self:_sendJSON(client, 400, {error = "Missing boundary in content-type"})
@@ -931,15 +944,22 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
             if not root_unlocked then
                 self:_sendJSON(client, 403, {error = "Root mode required", code = "root_required"})
             elseif data and data.old_path and data.new_path then
-                local ok, err_msg = FileOps:move(data.old_path, data.new_path, {
+                local ok, err_msg, err_details = FileOps:move(data.old_path, data.new_path, {
                     old_scope = data.old_scope,
                     new_scope = data.new_scope,
                     allow_root_scopes = true,
+                    conflict_strategy = data.conflict_strategy,
                 })
                 if ok then
                     self:_sendJSON(client, 200, {success = true})
                 else
-                    self:_sendJSON(client, 400, {error = err_msg or "Cannot move"})
+                    local payload = {error = err_msg or "Cannot move"}
+                    if err_details then
+                        for key, value in pairs(err_details) do
+                            payload[key] = value
+                        end
+                    end
+                    self:_sendJSON(client, err_details and err_details.code == "destination_exists" and 409 or 400, payload)
                 end
             else
                 self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})
@@ -950,15 +970,22 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
             if not root_unlocked then
                 self:_sendJSON(client, 403, {error = "Root mode required", code = "root_required"})
             elseif data and data.old_path and data.new_path then
-                local ok, err_msg = FileOps:copyFile(data.old_path, data.new_path, {
+                local ok, err_msg, err_details = FileOps:copyFile(data.old_path, data.new_path, {
                     old_scope = data.old_scope,
                     new_scope = data.new_scope,
                     allow_root_scopes = true,
+                    conflict_strategy = data.conflict_strategy,
                 })
                 if ok then
                     self:_sendJSON(client, 200, {success = true})
                 else
-                    self:_sendJSON(client, 400, {error = err_msg or "Cannot copy"})
+                    local payload = {error = err_msg or "Cannot copy"}
+                    if err_details then
+                        for key, value in pairs(err_details) do
+                            payload[key] = value
+                        end
+                    end
+                    self:_sendJSON(client, err_details and err_details.code == "destination_exists" and 409 or 400, payload)
                 end
             else
                 self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})

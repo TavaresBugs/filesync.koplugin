@@ -176,6 +176,7 @@ return function(FileOps, dependencies)
             return false, "No files were uploaded"
         end
 
+        local conflict_strategy = self:_normalizeConflictStrategy(form_fields.conflict_strategy or options.conflict_strategy)
         local pending_dirs = {}
         local planned_targets = {}
         local prepared_entries = {}
@@ -193,8 +194,33 @@ return function(FileOps, dependencies)
             end
 
             local target_attr = lfs.attributes(target_full_path)
-            if target_attr or planned_targets[target_full_path] then
-                return false, "Destination already exists"
+            if target_attr then
+                if conflict_strategy == "error" then
+                    return false, "Destination already exists", self:_buildDestinationConflict(
+                        { mode = "file" },
+                        target_attr,
+                        target_full_path,
+                        scope.id,
+                        {
+                            destination_path = target_rel_path,
+                            source_type = "file",
+                        }
+                    )
+                end
+            end
+
+            if planned_targets[target_full_path] then
+                return false, "Destination already exists", self:_buildDestinationConflict(
+                    { mode = "file" },
+                    { mode = "file" },
+                    target_full_path,
+                    scope.id,
+                    {
+                        destination_path = target_rel_path,
+                        source_type = "file",
+                        destination_type = "file",
+                    }
+                )
             end
 
             local parent_dir = target_full_path:match("(.+)/[^/]+$")
@@ -217,15 +243,40 @@ return function(FileOps, dependencies)
         end
 
         local uploaded_count = 0
-        for _, entry in ipairs(prepared_entries) do
-            local f = io.open(entry.full_path, "wb")
+        for index, entry in ipairs(prepared_entries) do
+            local temp_path = string.format("%s.filesync-upload-%d-%d.tmp", entry.full_path, os.time(), index)
+            local f = io.open(temp_path, "wb")
             if f then
-                f:write(entry.data)
-                f:close()
-                uploaded_count = uploaded_count + 1
-                logger.info("FileSync: Uploaded", entry.relative_path, "to", dir_path)
+                local write_ok, write_err = f:write(entry.data)
+                local close_ok, close_err = f:close()
+                if write_ok and close_ok ~= false then
+                    local can_finalize = true
+                    local target_attr = lfs.attributes(entry.full_path)
+                    if target_attr then
+                        local remove_ok, remove_err = self:_removeResolvedPath(entry.full_path)
+                        if not remove_ok then
+                            os.remove(temp_path)
+                            logger.warn("FileSync: Cannot replace existing destination", entry.full_path, remove_err)
+                            can_finalize = false
+                        end
+                    end
+
+                    if can_finalize then
+                        local rename_ok, rename_err = os.rename(temp_path, entry.full_path)
+                        if rename_ok then
+                            uploaded_count = uploaded_count + 1
+                            logger.info("FileSync: Uploaded", entry.relative_path, "to", dir_path)
+                        else
+                            os.remove(temp_path)
+                            logger.warn("FileSync: Cannot finalize upload", entry.full_path, rename_err)
+                        end
+                    end
+                else
+                    os.remove(temp_path)
+                    logger.warn("FileSync: Cannot write upload temp file", temp_path, write_err or close_err)
+                end
             else
-                logger.warn("FileSync: Cannot write file", entry.full_path)
+                logger.warn("FileSync: Cannot write file", temp_path)
             end
         end
 

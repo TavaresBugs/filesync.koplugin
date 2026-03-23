@@ -96,94 +96,55 @@ return function(FileOps, dependencies)
         return child_path:sub(1, #parent_path + 1) == parent_path .. "/"
     end
 
-    --- Move a file or directory.
-    function FileOps:move(old_rel_path, new_rel_path, options)
-        options = options or {}
-        local old_path, err1, old_scope = self:_resolvePath(old_rel_path, {
-            scope = options.old_scope or options.scope,
-            allow_root_scopes = options.allow_root_scopes,
-        })
-        if not old_path then
-            return false, err1
+    function FileOps:_normalizeConflictStrategy(strategy)
+        if strategy == "replace" or strategy == "merge_replace" then
+            return strategy
+        end
+        return "error"
+    end
+
+    function FileOps:_describeEntryType(attr)
+        if not attr then
+            return nil
+        end
+        return attr.mode == "directory" and "directory" or "file"
+    end
+
+    function FileOps:_buildDestinationConflict(src_attr, dest_attr, dest_path, scope_id, extra)
+        local details = extra or {}
+        details.code = "destination_exists"
+        details.source_type = details.source_type or self:_describeEntryType(src_attr)
+        details.destination_type = details.destination_type or self:_describeEntryType(dest_attr)
+        details.can_merge = details.can_merge == true
+            or (details.source_type == "directory" and details.destination_type == "directory")
+        if dest_path and scope_id and not details.destination_path then
+            details.destination_path = self:_getRelativePath(dest_path, scope_id)
+        end
+        return details
+    end
+
+    function FileOps:_removeResolvedPath(full_path)
+        local attr = lfs.attributes(full_path)
+        if not attr then
+            return true
         end
 
-        local new_path, err2, new_scope = self:_resolvePath(new_rel_path, {
-            scope = options.new_scope or options.scope,
-            allow_root_scopes = options.allow_root_scopes,
-        })
-        if not new_path then
-            return false, err2
+        if attr.mode == "directory" then
+            local ok, err = self:_deleteRecursive(full_path)
+            if not ok then
+                return false, "Cannot delete existing destination: " .. tostring(err)
+            end
+            return true
         end
 
-        if old_path == old_scope.root_path then
-            return false, "Cannot move root directory"
-        end
-
-        local src_attr = lfs.attributes(old_path)
-        if not src_attr then
-            return false, "Source does not exist"
-        end
-
-        local dest_attr = lfs.attributes(new_path)
-        if dest_attr then
-            return false, "Destination already exists"
-        end
-
-        local valid, valid_err = self:_validateDestinationPath(new_path)
-        if not valid then
-            return false, valid_err
-        end
-
-        if src_attr.mode == "directory" and old_scope.id == new_scope.id and self:_isPathInside(old_path, new_path) then
-            return false, "Cannot move directory inside itself"
-        end
-
-        local ok, move_err = os.rename(old_path, new_path)
+        local ok, err = os.remove(full_path)
         if not ok then
-            return false, "Cannot move: " .. tostring(move_err)
+            return false, "Cannot delete existing destination: " .. tostring(err)
         end
-
-        logger.info("FileSync: Moved", old_path, "to", new_path)
         return true
     end
 
-    --- Copy a file in chunks without loading it entirely into memory.
-    function FileOps:copyFile(src_rel_path, dst_rel_path, options)
-        options = options or {}
-        local src_path, err1 = self:_resolvePath(src_rel_path, {
-            scope = options.old_scope or options.scope,
-            allow_root_scopes = options.allow_root_scopes,
-        })
-        if not src_path then
-            return false, err1
-        end
-
-        local dst_path, err2 = self:_resolvePath(dst_rel_path, {
-            scope = options.new_scope or options.scope,
-            allow_root_scopes = options.allow_root_scopes,
-        })
-        if not dst_path then
-            return false, err2
-        end
-
-        local src_attr = lfs.attributes(src_path)
-        if not src_attr then
-            return false, "Source does not exist"
-        end
-        if src_attr.mode ~= "file" then
-            return false, "Copy only supports files"
-        end
-
-        local dest_attr = lfs.attributes(dst_path)
-        if dest_attr then
-            return false, "Destination already exists"
-        end
-
-        local valid, valid_err = self:_validateDestinationPath(dst_path)
-        if not valid then
-            return false, valid_err
-        end
-
+    function FileOps:_copyFileContents(src_path, dst_path)
         local src_file, src_err = io.open(src_path, "rb")
         if not src_file then
             return false, "Cannot open source file: " .. tostring(src_err)
@@ -221,8 +182,258 @@ return function(FileOps, dependencies)
             return false, "Cannot finalize destination file: " .. tostring(close_err)
         end
 
+        return true
+    end
+
+    function FileOps:_copyResolvedEntry(src_path, dst_path, src_attr, dst_scope_id, conflict_strategy)
+        conflict_strategy = self:_normalizeConflictStrategy(conflict_strategy)
+        src_attr = src_attr or lfs.attributes(src_path)
+        if not src_attr then
+            return false, "Source does not exist"
+        end
+
+        local dest_attr = lfs.attributes(dst_path)
+
+        if src_attr.mode == "directory" then
+            if dest_attr then
+                if dest_attr.mode == "directory" then
+                    if conflict_strategy == "error" then
+                        return false, "Destination already exists",
+                            self:_buildDestinationConflict(src_attr, dest_attr, dst_path, dst_scope_id)
+                    end
+
+                    if conflict_strategy == "replace" then
+                        local ok, err = self:_removeResolvedPath(dst_path)
+                        if not ok then
+                            return false, err
+                        end
+                        dest_attr = nil
+                    end
+                else
+                    if conflict_strategy == "error" then
+                        return false, "Destination already exists",
+                            self:_buildDestinationConflict(src_attr, dest_attr, dst_path, dst_scope_id)
+                    end
+
+                    local ok, err = self:_removeResolvedPath(dst_path)
+                    if not ok then
+                        return false, err
+                    end
+                    dest_attr = nil
+                end
+            end
+
+            if not dest_attr then
+                local ok, mkdir_err = lfs.mkdir(dst_path)
+                if not ok then
+                    return false, "Cannot create destination directory: " .. tostring(mkdir_err)
+                end
+            end
+
+            for name in lfs.dir(src_path) do
+                if name ~= "." and name ~= ".." then
+                    local child_src_path = src_path .. "/" .. name
+                    local child_dst_path = dst_path .. "/" .. name
+                    local child_attr = lfs.attributes(child_src_path)
+                    local ok, err, details = self:_copyResolvedEntry(
+                        child_src_path,
+                        child_dst_path,
+                        child_attr,
+                        dst_scope_id,
+                        conflict_strategy
+                    )
+                    if not ok then
+                        return false, err, details
+                    end
+                end
+            end
+
+            logger.info("FileSync: Copied directory", src_path, "to", dst_path)
+            return true
+        end
+
+        if dest_attr then
+            if conflict_strategy == "error" then
+                return false, "Destination already exists",
+                    self:_buildDestinationConflict(src_attr, dest_attr, dst_path, dst_scope_id)
+            end
+
+            local ok, err = self:_removeResolvedPath(dst_path)
+            if not ok then
+                return false, err
+            end
+        end
+
+        local ok, err = self:_copyFileContents(src_path, dst_path)
+        if not ok then
+            return false, err
+        end
+
         logger.info("FileSync: Copied", src_path, "to", dst_path)
         return true
+    end
+
+    function FileOps:_moveResolvedEntry(src_path, dst_path, src_attr, src_scope_id, dst_scope_id, conflict_strategy)
+        conflict_strategy = self:_normalizeConflictStrategy(conflict_strategy)
+        src_attr = src_attr or lfs.attributes(src_path)
+        if not src_attr then
+            return false, "Source does not exist"
+        end
+
+        local dest_attr = lfs.attributes(dst_path)
+        if dest_attr then
+            if src_attr.mode == "directory" and dest_attr.mode == "directory" and conflict_strategy == "merge_replace" then
+                local merge_ok, merge_err, merge_details = self:_copyResolvedEntry(
+                    src_path,
+                    dst_path,
+                    src_attr,
+                    dst_scope_id,
+                    "merge_replace"
+                )
+                if not merge_ok then
+                    return false, merge_err, merge_details
+                end
+
+                local cleanup_ok, cleanup_err = self:_removeResolvedPath(src_path)
+                if not cleanup_ok then
+                    return false, "Cannot finalize move: " .. tostring(cleanup_err)
+                end
+
+                logger.info("FileSync: Merged and moved", src_path, "to", dst_path)
+                return true
+            end
+
+            if conflict_strategy == "error" then
+                return false, "Destination already exists",
+                    self:_buildDestinationConflict(src_attr, dest_attr, dst_path, dst_scope_id)
+            end
+
+            local remove_ok, remove_err = self:_removeResolvedPath(dst_path)
+            if not remove_ok then
+                return false, remove_err
+            end
+        end
+
+        local ok, move_err = os.rename(src_path, dst_path)
+        if ok then
+            logger.info("FileSync: Moved", src_path, "to", dst_path)
+            return true
+        end
+
+        local copy_ok, copy_err, copy_details = self:_copyResolvedEntry(
+            src_path,
+            dst_path,
+            src_attr,
+            dst_scope_id,
+            src_attr.mode == "directory" and "merge_replace" or "replace"
+        )
+        if not copy_ok then
+            return false, copy_err, copy_details
+        end
+
+        local cleanup_ok, cleanup_err = self:_removeResolvedPath(src_path)
+        if not cleanup_ok then
+            return false, "Cannot finalize move: " .. tostring(cleanup_err)
+        end
+
+        logger.info("FileSync: Moved", src_path, "to", dst_path)
+        return true
+    end
+
+    --- Move a file or directory.
+    function FileOps:move(old_rel_path, new_rel_path, options)
+        options = options or {}
+        local old_path, err1, old_scope = self:_resolvePath(old_rel_path, {
+            scope = options.old_scope or options.scope,
+            allow_root_scopes = options.allow_root_scopes,
+        })
+        if not old_path then
+            return false, err1
+        end
+
+        local new_path, err2, new_scope = self:_resolvePath(new_rel_path, {
+            scope = options.new_scope or options.scope,
+            allow_root_scopes = options.allow_root_scopes,
+        })
+        if not new_path then
+            return false, err2
+        end
+
+        if old_path == old_scope.root_path then
+            return false, "Cannot move root directory"
+        end
+
+        local src_attr = lfs.attributes(old_path)
+        if not src_attr then
+            return false, "Source does not exist"
+        end
+
+        if old_path == new_path then
+            return false, "Source and destination are the same"
+        end
+
+        local valid, valid_err = self:_validateDestinationPath(new_path)
+        if not valid then
+            return false, valid_err
+        end
+
+        if src_attr.mode == "directory" and old_scope.id == new_scope.id and self:_isPathInside(old_path, new_path) then
+            return false, "Cannot move directory inside itself"
+        end
+
+        return self:_moveResolvedEntry(
+            old_path,
+            new_path,
+            src_attr,
+            old_scope.id,
+            new_scope.id,
+            options.conflict_strategy
+        )
+    end
+
+    --- Copy a file or directory.
+    function FileOps:copyFile(src_rel_path, dst_rel_path, options)
+        options = options or {}
+        local src_path, err1, src_scope = self:_resolvePath(src_rel_path, {
+            scope = options.old_scope or options.scope,
+            allow_root_scopes = options.allow_root_scopes,
+        })
+        if not src_path then
+            return false, err1
+        end
+
+        local dst_path, err2, dst_scope = self:_resolvePath(dst_rel_path, {
+            scope = options.new_scope or options.scope,
+            allow_root_scopes = options.allow_root_scopes,
+        })
+        if not dst_path then
+            return false, err2
+        end
+
+        local src_attr = lfs.attributes(src_path)
+        if not src_attr then
+            return false, "Source does not exist"
+        end
+        if src_path == dst_path then
+            return false, "Source and destination are the same"
+        end
+
+        local valid, valid_err = self:_validateDestinationPath(dst_path)
+        if not valid then
+            return false, valid_err
+        end
+
+        if src_attr.mode == "directory" and src_scope.id == dst_scope.id and self:_isPathInside(src_path, dst_path) then
+            return false, "Cannot copy directory inside itself"
+        end
+
+        return self:_copyResolvedEntry(
+            src_path,
+            dst_path,
+            src_attr,
+            dst_scope.id,
+            options.conflict_strategy
+        )
     end
 
     --- Delete a file or directory (directory must be empty unless recursive=true).

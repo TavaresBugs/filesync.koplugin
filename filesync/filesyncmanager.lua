@@ -659,6 +659,41 @@ function FileSyncManager:_tryStartHttpServer(HttpServer, port, root_dir)
     return false, err
 end
 
+function FileSyncManager:_isPortInUseError(err)
+    local message = tostring(err or ""):lower()
+    return message:find("address already in use", 1, true)
+        or message:find("already in use", 1, true)
+        or message:find("eaddrinuse", 1, true)
+end
+
+function FileSyncManager:_buildStartServerErrorMessage(port, err, options)
+    options = options or {}
+    local fallback_port = options.fallback_port
+    local fallback_err = options.fallback_err
+
+    if self:_isPortInUseError(err) then
+        if port == DEFAULT_PORT then
+            if fallback_port and fallback_err then
+                if self:_isPortInUseError(fallback_err) then
+                    return T(_("FileSync tried to start on port %1, but another service is already using it.\n\nFileSync then tried port %2 automatically, but that port is already in use too.\n\nStop the other service, or change the Server Port setting to another free port such as 8081."), port, fallback_port)
+                end
+
+                return T(_("FileSync tried to start on port %1, but another service is already using it.\n\nFileSync then tried port %2 automatically, but it also failed.\n\nSecond error: %3"), port, fallback_port, tostring(fallback_err))
+            end
+
+            return T(_("FileSync could not start because another service is already using port %1.\n\nStop the service using port %1, or change the Server Port setting to 8080 or higher."), port)
+        end
+
+        return T(_("Failed to start server on port %1.\n\nAnother service is already using this port.\n\nStop the service using port %1, or change the Server Port setting to 8080 or higher."), port)
+    end
+
+    if port < 1024 then
+        return T(_("Failed to start server on port %1.\n\nPorts below 1024 require root/admin privileges. The system may not allow binding to this port.\n\nTry changing the port to 8080 or higher in the Server Port setting."), port)
+    end
+
+    return T(_("Failed to start server: %1"), tostring(err))
+end
+
 function FileSyncManager:start(silent)
     if self._running then
         if not silent then
@@ -718,8 +753,10 @@ function FileSyncManager:start(silent)
     -- Start the HTTP server
     local HttpServer = require("filesync/httpserver")
     local ok, err = self:_tryStartHttpServer(HttpServer, port, root_dir)
+    local original_start_err = err
     local used_fallback_port = false
     local original_port = port
+    local fallback_start_err = nil
 
     if not ok and not port_was_user_defined and port == DEFAULT_PORT then
         local fallback_ok, fallback_err = self:_tryStartHttpServer(HttpServer, FALLBACK_PORT, root_dir)
@@ -731,6 +768,7 @@ function FileSyncManager:start(silent)
             err = nil
             logger.warn("FileSync: Port", original_port, "unavailable; switched automatically to", port)
         else
+            fallback_start_err = fallback_err
             err = fallback_err
         end
     end
@@ -738,14 +776,11 @@ function FileSyncManager:start(silent)
     if not ok then
         logger.err("FileSync: Failed to start server:", err)
         if not silent then
-            local err_msg
-            if port < 1024 then
-                err_msg = T(_("Failed to start server on port %1.\n\nPorts below 1024 require root/admin privileges. The system may not allow binding to this port.\n\nTry changing the port to 8080 or higher in the Server Port setting."), port)
-            else
-                err_msg = T(_("Failed to start server: %1"), tostring(err))
-            end
             UIManager:show(InfoMessage:new{
-                text = err_msg,
+                text = self:_buildStartServerErrorMessage(original_port, original_start_err or err, {
+                    fallback_port = fallback_start_err and FALLBACK_PORT or nil,
+                    fallback_err = fallback_start_err,
+                }),
                 timeout = 8,
             })
         end
@@ -793,8 +828,14 @@ function FileSyncManager:start(silent)
     if not silent then
         self:showQRCode()
         if used_fallback_port then
+            local fallback_message
+            if self:_isPortInUseError(original_start_err) then
+                fallback_message = T(_("FileSync tried to start on port %1, but another service was already using it.\n\nTo avoid the conflict, FileSync switched automatically to port %2.\n\nUse this address: %3"), original_port, port, self:buildURL(ip, port))
+            else
+                fallback_message = T(_("Port %1 was unavailable, so FileSync switched automatically to port %2.\n\nUse this address: %3"), original_port, port, self:buildURL(ip, port))
+            end
             UIManager:show(InfoMessage:new{
-                text = T(_("Port %1 was unavailable, so FileSync switched automatically to port %2.\n\nUse this address: %3"), original_port, port, self:buildURL(ip, port)),
+                text = fallback_message,
                 timeout = 6,
             })
         end
@@ -954,8 +995,17 @@ function FileSyncManager:showQRCode()
     -- Icon + Title row
     local icon_dir = debug.getinfo(1, "S").source:match("@(.+)"):match("(.*/)")
     local icon_size = Screen:scaleBySize(46)
+    local icon_file = icon_dir .. "icon.png"
+    if Screen.night_mode then
+        local dark_icon_file = icon_dir .. "icon_dark.png"
+        local dark_icon_handle = io.open(dark_icon_file, "rb")
+        if dark_icon_handle then
+            dark_icon_handle:close()
+            icon_file = dark_icon_file
+        end
+    end
     local icon_widget = ImageWidget:new{
-        file = icon_dir .. "icon.png",
+        file = icon_file,
         width = icon_size,
         height = icon_size,
         alpha = true,

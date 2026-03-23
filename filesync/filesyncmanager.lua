@@ -32,30 +32,91 @@ local FileSyncManager = {
     _server = nil,
     _port = nil,
     _ip = nil,
+    _kindle_firewall_port = nil,
+    _kindle_firewall_bin = nil,
+    _restart_desired = false,
+    _wifi_monitor_active = false,
+    _wifi_monitor_generation = 0,
+    _wifi_monitor_last_online = nil,
+    _wifi_monitor_last_ip = nil,
     _was_running_before_suspend = false,
     _standby_prevented = false,
     _qr_widget = nil,
 }
 
 local DEFAULT_PORT = 80
+local FALLBACK_PORT = 8080
+local KINDLE_IPTABLES_CANDIDATES = {
+    "/usr/sbin/iptables",
+    "/sbin/iptables",
+    "iptables",
+}
+local WIFI_MONITOR_INTERVAL_SECONDS = 5
+local PORT_SETTING_KEY = "filesync_port"
+local PORT_USER_DEFINED_SETTING_KEY = "filesync_port_user_defined"
 -- NOTE: Port 80 is used by default for convenience (no :port in the URL).
 -- On Kindle, KOReader runs as root, so binding to port 80 works.
 -- On other devices this may fail due to OS permission restrictions;
 -- the start() function handles this case with a clear error message.
--- The Root PIN is stored in plain plugin settings because this first version
--- needs to reveal it locally on the device. This is convenient, not secure.
+-- The Root PIN is stored in plain plugin settings because it must be
+-- revealable locally on the device. This is convenient, not strong security.
 local ROOT_PIN_SETTING_KEY = "filesync_root_pin"
+-- Cleanup compatibility for local hash-only builds created during PR-02 work.
+local ROOT_PIN_HASH_SETTING_KEY = "filesync_root_pin_hash"
+local ROOT_PIN_SALT_SETTING_KEY = "filesync_root_pin_salt"
+local ROOT_PIN_LENGTH_SETTING_KEY = "filesync_root_pin_length"
 
 function FileSyncManager:getPort()
     if self._port then return self._port end
-    self._port = G_reader_settings:readSetting("filesync_port", DEFAULT_PORT)
+    local saved_port = self:_normalizePort(G_reader_settings:readSetting(PORT_SETTING_KEY))
+    self._port = saved_port or DEFAULT_PORT
     return self._port
 end
 
-function FileSyncManager:setPort(port)
-    self._port = port
-    G_reader_settings:saveSetting("filesync_port", port)
+function FileSyncManager:_normalizePort(port)
+    port = tonumber(port)
+    if not port then
+        return nil
+    end
+
+    port = math.floor(port)
+    if port < 1 or port > 65535 then
+        return nil
+    end
+
+    return port
+end
+
+function FileSyncManager:hasUserConfiguredPort()
+    local user_defined = G_reader_settings:readSetting(PORT_USER_DEFINED_SETTING_KEY)
+    if user_defined ~= nil then
+        return user_defined == true
+    end
+
+    -- Older installs stored only the port value, so preserve that behavior
+    -- and avoid surprising users by auto-switching a previously saved port.
+    return self:_normalizePort(G_reader_settings:readSetting(PORT_SETTING_KEY)) ~= nil
+end
+
+function FileSyncManager:_persistPort(port, user_defined)
+    local normalized_port = self:_normalizePort(port)
+    if not normalized_port then
+        return false
+    end
+
+    self._port = normalized_port
+    G_reader_settings:saveSetting(PORT_SETTING_KEY, normalized_port)
+    G_reader_settings:saveSetting(PORT_USER_DEFINED_SETTING_KEY, user_defined == true)
     G_reader_settings:flush()
+    return true
+end
+
+function FileSyncManager:setPort(port)
+    return self:_persistPort(port, true)
+end
+
+function FileSyncManager:_setAutomaticPort(port)
+    return self:_persistPort(port, false)
 end
 
 function FileSyncManager:getSafeMode()
@@ -88,6 +149,20 @@ function FileSyncManager:_validateRootPin(pin)
     return pin
 end
 
+function FileSyncManager:_deleteSetting(key)
+    if G_reader_settings.delSetting then
+        G_reader_settings:delSetting(key)
+    else
+        G_reader_settings:saveSetting(key, nil)
+    end
+end
+
+function FileSyncManager:_clearHashedRootPinCompatState()
+    self:_deleteSetting(ROOT_PIN_HASH_SETTING_KEY)
+    self:_deleteSetting(ROOT_PIN_SALT_SETTING_KEY)
+    self:_deleteSetting(ROOT_PIN_LENGTH_SETTING_KEY)
+end
+
 function FileSyncManager:getRootPin()
     local pin = G_reader_settings:readSetting(ROOT_PIN_SETTING_KEY)
     pin = self:_normalizeRootPin(pin)
@@ -110,10 +185,8 @@ function FileSyncManager:getRootPinLength()
 end
 
 function FileSyncManager:_resetRootUnlock()
-    if self._server and self._server.setRootUnlocked then
-        self._server:setRootUnlocked(false)
-    elseif self._server then
-        self._server._root_unlocked = false
+    if self._server and self._server.invalidateAllRootSessions then
+        self._server:invalidateAllRootSessions()
     end
 end
 
@@ -124,17 +197,15 @@ function FileSyncManager:setRootPin(pin)
     end
 
     G_reader_settings:saveSetting(ROOT_PIN_SETTING_KEY, normalized_pin)
+    self:_clearHashedRootPinCompatState()
     G_reader_settings:flush()
     self:_resetRootUnlock()
     return true
 end
 
 function FileSyncManager:removeRootPin()
-    if G_reader_settings.delSetting then
-        G_reader_settings:delSetting(ROOT_PIN_SETTING_KEY)
-    else
-        G_reader_settings:saveSetting(ROOT_PIN_SETTING_KEY, nil)
-    end
+    self:_deleteSetting(ROOT_PIN_SETTING_KEY)
+    self:_clearHashedRootPinCompatState()
     G_reader_settings:flush()
     self:_resetRootUnlock()
     return true
@@ -148,11 +219,27 @@ function FileSyncManager:verifyRootPin(pin)
     return self:_normalizeRootPin(pin) == saved_pin
 end
 
-function FileSyncManager:promptSetRootPin(is_change)
+function FileSyncManager:promptSetRootPin(is_change, options)
+    options = options or {}
     local InputDialog = require("ui/widget/inputdialog")
     local pin_dialog
-    local title = is_change and _("Change Root PIN") or _("Define Root PIN")
-    local success_message = is_change and _("Root PIN updated.") or _("Root PIN saved.")
+    local title
+    if is_change then
+        title = _("Change Root PIN")
+    elseif options.required_for_server then
+        title = _("Define Root PIN to Start")
+    else
+        title = _("Define Root PIN")
+    end
+
+    local success_message
+    if is_change then
+        success_message = _("Root PIN updated.")
+    elseif options.start_server_after_save then
+        success_message = _("Root PIN saved. Starting server.")
+    else
+        success_message = _("Root PIN saved.")
+    end
 
     pin_dialog = InputDialog:new{
         title = title,
@@ -166,6 +253,9 @@ function FileSyncManager:promptSetRootPin(is_change)
                     id = "close",
                     callback = function()
                         UIManager:close(pin_dialog)
+                        if options.on_cancel then
+                            options.on_cancel()
+                        end
                     end,
                 },
                 {
@@ -186,6 +276,10 @@ function FileSyncManager:promptSetRootPin(is_change)
                             text = success_message,
                             timeout = 3,
                         })
+
+                        if options.on_success then
+                            options.on_success()
+                        end
                     end,
                 },
             },
@@ -250,7 +344,7 @@ function FileSyncManager:configurePort()
         title = _("Server port"),
         input = tostring(self:getPort()),
         input_type = "number",
-        input_hint = "80",
+        input_hint = tostring(DEFAULT_PORT),
         buttons = {
             {
                 {
@@ -358,6 +452,213 @@ function FileSyncManager:isRunning()
     return self._running
 end
 
+function FileSyncManager:_pathExists(path)
+    if not path or path == "" then
+        return false
+    end
+
+    local fh = io.open(path, "rb")
+    if fh then
+        fh:close()
+        return true
+    end
+
+    return false
+end
+
+function FileSyncManager:_runShellCommand(command)
+    local ok, result1, result2, result3 = pcall(os.execute, command)
+    if not ok then
+        return false, tostring(result1)
+    end
+
+    if type(result1) == "number" then
+        return result1 == 0, tostring(result1)
+    end
+
+    if result1 == true or result1 == 0 then
+        return true, tostring(result3 or result2 or result1)
+    end
+
+    return false, tostring(result3 or result2 or result1)
+end
+
+function FileSyncManager:_getKindleIptablesCandidates()
+    local candidates = {}
+    local seen = {}
+
+    local function addCandidate(candidate)
+        if not candidate or candidate == "" or seen[candidate] then
+            return
+        end
+        if candidate:sub(1, 1) == "/" and not self:_pathExists(candidate) then
+            return
+        end
+        seen[candidate] = true
+        candidates[#candidates + 1] = candidate
+    end
+
+    addCandidate(self._kindle_firewall_bin)
+    for _, candidate in ipairs(KINDLE_IPTABLES_CANDIDATES) do
+        addCandidate(candidate)
+    end
+
+    return candidates
+end
+
+function FileSyncManager:_runKindleIptablesRule(action, port)
+    port = tonumber(port)
+    if not port then
+        return false, "invalid port"
+    end
+
+    local candidates = self:_getKindleIptablesCandidates()
+    if #candidates == 0 then
+        return false, "iptables binary not found"
+    end
+
+    local last_error = "iptables command failed"
+    for _, binary in ipairs(candidates) do
+        local command = string.format(
+            "%q %s INPUT -p tcp --dport %d -j ACCEPT >/dev/null 2>&1",
+            binary,
+            action,
+            math.floor(port)
+        )
+        local ok, status = self:_runShellCommand(command)
+        if ok then
+            self._kindle_firewall_bin = binary
+            return true
+        end
+
+        last_error = string.format("%s exited with status %s", binary, tostring(status))
+        logger.warn("FileSync: Kindle firewall command failed:", action, binary, "port", port, "status", status)
+    end
+
+    return false, last_error
+end
+
+function FileSyncManager:_cleanupFailedStart()
+    if self._server then
+        local ok, err = pcall(function()
+            self._server:stop()
+        end)
+        if not ok then
+            logger.warn("FileSync: Failed to stop partially started server:", err)
+        end
+        self._server = nil
+    end
+
+    if Device:isKindle() and self._kindle_firewall_port then
+        local ok, err = self:closeKindleFirewall(self._kindle_firewall_port)
+        if not ok then
+            logger.warn("FileSync: Failed to clean up Kindle firewall after startup error:", err)
+        end
+    end
+
+    local standby_ok, standby_err = self:allowStandby()
+    if not standby_ok then
+        logger.warn("FileSync: Failed to restore standby state after startup error:", standby_err)
+    end
+
+    self._running = false
+    self._ip = nil
+end
+
+function FileSyncManager:_stopWifiMonitor()
+    self._wifi_monitor_active = false
+    self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
+    self._wifi_monitor_last_online = nil
+    self._wifi_monitor_last_ip = nil
+end
+
+function FileSyncManager:_pollWifiMonitor()
+    if not self._restart_desired and not self._running then
+        self:_stopWifiMonitor()
+        return
+    end
+
+    local wifi_on = NetworkMgr and NetworkMgr.isWifiOn and NetworkMgr:isWifiOn() or false
+    local current_ip = wifi_on and self:getLocalIP() or nil
+    local is_online = wifi_on and current_ip ~= nil
+    local was_online = self._wifi_monitor_last_online
+    local previous_ip = self._wifi_monitor_last_ip
+
+    self._wifi_monitor_last_online = is_online
+    self._wifi_monitor_last_ip = current_ip
+
+    if self._running then
+        if not is_online then
+            logger.info("FileSync: WiFi lost while server was running; stopping and waiting for reconnect")
+            self:stop(true, false, true)
+            return
+        end
+
+        if previous_ip and current_ip and previous_ip ~= current_ip then
+            logger.info("FileSync: WiFi IP changed from", previous_ip, "to", current_ip, "- restarting server")
+            self:stop(true, false, true)
+            self:start(true)
+            return
+        end
+
+        return
+    end
+
+    if self._restart_desired and was_online == false and is_online then
+        logger.info("FileSync: WiFi reconnected; restarting server")
+        self:start(true)
+    end
+end
+
+function FileSyncManager:_ensureWifiMonitor()
+    if self._wifi_monitor_active then
+        return
+    end
+
+    self._wifi_monitor_active = true
+    self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
+    local generation = self._wifi_monitor_generation
+
+    local function tick()
+        if not self._wifi_monitor_active or self._wifi_monitor_generation ~= generation then
+            return
+        end
+
+        self:_pollWifiMonitor()
+
+        if self._wifi_monitor_active and self._wifi_monitor_generation == generation then
+            UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+        end
+    end
+
+    UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+end
+
+function FileSyncManager:_refreshWifiMonitor()
+    if self._restart_desired or self._running then
+        self:_ensureWifiMonitor()
+    else
+        self:_stopWifiMonitor()
+    end
+end
+
+function FileSyncManager:_tryStartHttpServer(HttpServer, port, root_dir)
+    local ok, err = pcall(function()
+        self._server = HttpServer:new{
+            port = port,
+            root_dir = root_dir,
+        }
+        self._server:start()
+    end)
+
+    if ok then
+        return true
+    end
+
+    self._server = nil
+    return false, err
+end
+
 function FileSyncManager:start(silent)
     if self._running then
         if not silent then
@@ -366,6 +667,24 @@ function FileSyncManager:start(silent)
                 timeout = 2,
             })
         end
+        return
+    end
+
+    if not self:hasRootPin() then
+        if silent then
+            logger.warn("FileSync: Refusing to start server without a Root PIN")
+            self._restart_desired = false
+            self:_refreshWifiMonitor()
+            return
+        end
+
+        self:promptSetRootPin(false, {
+            required_for_server = true,
+            start_server_after_save = true,
+            on_success = function()
+                self:checkBatteryAndStart()
+            end,
+        })
         return
     end
 
@@ -394,16 +713,27 @@ function FileSyncManager:start(silent)
 
     local port = self:getPort()
     local root_dir = self:getRootDir()
+    local port_was_user_defined = self:hasUserConfiguredPort()
 
     -- Start the HTTP server
     local HttpServer = require("filesync/httpserver")
-    local ok, err = pcall(function()
-        self._server = HttpServer:new{
-            port = port,
-            root_dir = root_dir,
-        }
-        self._server:start()
-    end)
+    local ok, err = self:_tryStartHttpServer(HttpServer, port, root_dir)
+    local used_fallback_port = false
+    local original_port = port
+
+    if not ok and not port_was_user_defined and port == DEFAULT_PORT then
+        local fallback_ok, fallback_err = self:_tryStartHttpServer(HttpServer, FALLBACK_PORT, root_dir)
+        if fallback_ok then
+            port = FALLBACK_PORT
+            used_fallback_port = true
+            self:_setAutomaticPort(port)
+            ok = true
+            err = nil
+            logger.warn("FileSync: Port", original_port, "unavailable; switched automatically to", port)
+        else
+            err = fallback_err
+        end
+    end
 
     if not ok then
         logger.err("FileSync: Failed to start server:", err)
@@ -424,22 +754,55 @@ function FileSyncManager:start(silent)
 
     -- Add Kindle firewall rules
     if Device:isKindle() then
-        self:openKindleFirewall(port)
+        local firewall_ok, firewall_err = self:openKindleFirewall(port)
+        if not firewall_ok then
+            local err_msg = "Could not configure Kindle firewall: " .. tostring(firewall_err)
+            logger.err("FileSync:", err_msg)
+            self:_cleanupFailedStart()
+            if not silent then
+                UIManager:show(InfoMessage:new{
+                    text = T(_("Failed to start server: %1"), err_msg),
+                    timeout = 8,
+                })
+            end
+            return
+        end
+    end
+
+    local standby_ok, standby_err = self:preventStandby()
+    if not standby_ok then
+        local err_msg = "Could not prevent standby: " .. tostring(standby_err)
+        logger.err("FileSync:", err_msg)
+        self:_cleanupFailedStart()
+        if not silent then
+            UIManager:show(InfoMessage:new{
+                text = T(_("Failed to start server: %1"), err_msg),
+                timeout = 8,
+            })
+        end
+        return
     end
 
     self._running = true
     self._ip = ip
     self._port = port
-    self:preventStandby()
+    self._restart_desired = true
+    self:_refreshWifiMonitor()
     logger.info("FileSync: Server started on", self:buildURL(ip, port))
 
     if not silent then
         self:showQRCode()
+        if used_fallback_port then
+            UIManager:show(InfoMessage:new{
+                text = T(_("Port %1 was unavailable, so FileSync switched automatically to port %2.\n\nUse this address: %3"), original_port, port, self:buildURL(ip, port)),
+                timeout = 6,
+            })
+        end
     end
 end
 
-function FileSyncManager:stop(silent, keep_qr_screen)
-    if not self._running then
+function FileSyncManager:stop(silent, keep_qr_screen, preserve_restart_intent)
+    if not self._running and not self._server and not self._standby_prevented and not self._kindle_firewall_port then
         return
     end
 
@@ -449,19 +812,33 @@ function FileSyncManager:stop(silent, keep_qr_screen)
     end
 
     if self._server then
-        pcall(function()
+        local ok, err = pcall(function()
             self._server:stop()
         end)
+        if not ok then
+            logger.warn("FileSync: Failed to stop HTTP server cleanly:", err)
+        end
         self._server = nil
     end
 
     -- Remove Kindle firewall rules
     if Device:isKindle() then
-        self:closeKindleFirewall(self:getPort())
+        local firewall_ok, firewall_err = self:closeKindleFirewall()
+        if not firewall_ok then
+            logger.warn("FileSync: Failed to remove Kindle firewall rule:", firewall_err)
+        end
     end
 
     self._running = false
-    self:allowStandby()
+    if not preserve_restart_intent then
+        self._restart_desired = false
+    end
+    local standby_ok, standby_err = self:allowStandby()
+    if not standby_ok then
+        logger.warn("FileSync: Failed to restore standby after stop:", standby_err)
+    end
+    self._ip = nil
+    self:_refreshWifiMonitor()
     logger.info("FileSync: Server stopped")
 
     if not silent then
@@ -473,22 +850,51 @@ function FileSyncManager:stop(silent, keep_qr_screen)
 end
 
 function FileSyncManager:preventStandby()
-    if not self._standby_prevented then
-        UIManager:preventStandby()
-        self._standby_prevented = true
-        logger.info("FileSync: Standby prevented")
+    if self._standby_prevented then
+        return true
     end
+
+    local ok, err = pcall(function()
+        UIManager:preventStandby()
+    end)
+    if not ok then
+        return false, err
+    end
+
+    self._standby_prevented = true
+    logger.info("FileSync: Standby prevented")
+    return true
 end
 
 function FileSyncManager:allowStandby()
-    if self._standby_prevented then
-        UIManager:allowStandby()
-        self._standby_prevented = false
-        logger.info("FileSync: Standby allowed")
+    if not self._standby_prevented then
+        return true
     end
+
+    local ok, err = pcall(function()
+        UIManager:allowStandby()
+    end)
+    if not ok then
+        return false, err
+    end
+
+    self._standby_prevented = false
+    logger.info("FileSync: Standby allowed")
+    return true
 end
 
 function FileSyncManager:checkBatteryAndStart()
+    if not self:hasRootPin() then
+        self:promptSetRootPin(false, {
+            required_for_server = true,
+            start_server_after_save = true,
+            on_success = function()
+                self:checkBatteryAndStart()
+            end,
+        })
+        return
+    end
+
     local ok_power, power_device = pcall(function() return Device:getPowerDevice() end)
     local capacity = 100
     local is_charging = false
@@ -737,21 +1143,44 @@ function FileSyncManager:showQRCode()
 end
 
 function FileSyncManager:openKindleFirewall(port)
-    -- Add iptables rule to allow incoming connections on the server port
-    os.execute(string.format(
-        "iptables -A INPUT -p tcp --dport %d -j ACCEPT 2>/dev/null",
-        port
-    ))
+    port = tonumber(port)
+    if not port then
+        return false, "invalid port"
+    end
+
+    if self._kindle_firewall_port and self._kindle_firewall_port ~= port then
+        local close_ok, close_err = self:closeKindleFirewall(self._kindle_firewall_port)
+        if not close_ok then
+            logger.warn("FileSync: Failed to close stale Kindle firewall rule:", close_err)
+        end
+    end
+
+    local ok, err = self:_runKindleIptablesRule("-A", port)
+    if not ok then
+        return false, err
+    end
+
+    self._kindle_firewall_port = port
     logger.info("FileSync: Kindle firewall rule added for port", port)
+    return true
 end
 
 function FileSyncManager:closeKindleFirewall(port)
-    -- Remove the iptables rule
-    os.execute(string.format(
-        "iptables -D INPUT -p tcp --dport %d -j ACCEPT 2>/dev/null",
-        port
-    ))
-    logger.info("FileSync: Kindle firewall rule removed for port", port)
+    local target_port = tonumber(port or self._kindle_firewall_port)
+    if not target_port then
+        return true
+    end
+
+    local ok, err = self:_runKindleIptablesRule("-D", target_port)
+    if not ok then
+        return false, err
+    end
+
+    if self._kindle_firewall_port == target_port then
+        self._kindle_firewall_port = nil
+    end
+    logger.info("FileSync: Kindle firewall rule removed for port", target_port)
+    return true
 end
 
 return FileSyncManager

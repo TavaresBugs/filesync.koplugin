@@ -2271,7 +2271,7 @@ html, body {
             root_pin_invalid: "Incorrect Root PIN",
             root_pin_missing: "Root PIN is not configured on this Kindle",
             root_pin_required: "Enter the Root PIN to unlock Root mode.",
-            root_pin_throttled: "Too many attempts. Wait {seconds}s and try again.",
+            root_pin_throttled: "Too many attempts. Wait {seconds}s and try again. If needed, reveal the Root PIN on the Kindle.",
             root_pin_unavailable: "Define the Root PIN on the Kindle to unlock Root mode.",
             root_required_clipboard: "Root mode is required to copy, cut, or paste items.",
             root_required_delete: "Root mode is required to delete items.",
@@ -2385,7 +2385,7 @@ html, body {
             root_pin_invalid: "PIN Root incorrecto",
             root_pin_missing: "El PIN Root no est\u00e1 configurado en este Kindle",
             root_pin_required: "Introduce el PIN Root para desbloquear el modo Root.",
-            root_pin_throttled: "Demasiados intentos. Espera {seconds}s e int\u00e9ntalo de nuevo.",
+            root_pin_throttled: "Demasiados intentos. Espera {seconds}s e int\u00e9ntalo de nuevo. Si hace falta, revela el PIN Root en el Kindle.",
             root_pin_unavailable: "Define el PIN Root en el Kindle para desbloquear el modo Root.",
             root_required_clipboard: "El modo Root es necesario para copiar, cortar o pegar elementos.",
             root_required_delete: "El modo Root es necesario para eliminar elementos.",
@@ -2499,7 +2499,7 @@ html, body {
             root_pin_invalid: "PIN Root incorreto",
             root_pin_missing: "O PIN Root n\u00e3o est\u00e1 configurado neste Kindle",
             root_pin_required: "Digite o PIN Root para desbloquear o modo Root.",
-            root_pin_throttled: "Muitas tentativas. Aguarde {seconds}s e tente novamente.",
+            root_pin_throttled: "Muitas tentativas. Aguarde {seconds}s e tente novamente. Se precisar, revele o PIN Root no Kindle.",
             root_pin_unavailable: "Defina o PIN Root no Kindle para liberar o modo Root.",
             root_required_clipboard: "O modo Root \u00e9 necess\u00e1rio para copiar, recortar ou colar itens.",
             root_required_delete: "O modo Root \u00e9 necess\u00e1rio para excluir itens.",
@@ -2599,6 +2599,7 @@ html, body {
     var hasRootPin = false;
     var rootUnlocked = false;
     var authRequestPending = false;
+    var authSessionRecoveryPromise = null;
     var rootPinExpectedLength = 4;
     var safeExtensions = {};
     var availableScopes = [];
@@ -2629,7 +2630,8 @@ html, body {
     };
 
     // ===== API =====
-    async function api(method, url, body) {
+    async function api(method, url, body, options) {
+        options = options || {};
         var opts = { method: method };
         if (body instanceof FormData) {
             opts.body = body;
@@ -2650,9 +2652,49 @@ html, body {
             apiError.code = data && data.code;
             apiError.status = res.status;
             apiError.retryAfter = data && data.retry_after;
+            if (apiError.code === 'auth_session_invalid' && options.handleAuthInvalid !== false) {
+                apiError.handled = true;
+                await recoverFromExpiredAuthSession();
+            }
             throw apiError;
         }
         return data;
+    }
+
+    function isAuthSessionInvalidError(err) {
+        return !!(err && err.code === 'auth_session_invalid');
+    }
+
+    async function recoverFromExpiredAuthSession() {
+        if (authSessionRecoveryPromise) {
+            return authSessionRecoveryPromise;
+        }
+
+        authSessionRecoveryPromise = (async function() {
+            var shouldRefresh = rootUnlocked || currentScope === 'system' || showHiddenFiles || canShowHidden || !!currentDetailEntry;
+            rootUnlocked = false;
+            authRequestPending = false;
+            showHiddenFiles = false;
+            updateAuthUI();
+
+            if (!shouldRefresh) {
+                updateNavigationContextUI();
+                updateParentNav();
+                return;
+            }
+
+            try {
+                await refreshAfterAuthModeChange();
+            } catch (_err) {
+                // Keep the UI in safe mode even if the refresh fails.
+            }
+        })();
+
+        try {
+            return await authSessionRecoveryPromise;
+        } finally {
+            authSessionRecoveryPromise = null;
+        }
     }
 
     function setAvailableScopes(scopes) {
@@ -2944,6 +2986,9 @@ html, body {
             renderBreadcrumbs(data.breadcrumbs);
             renderFiles(data.entries);
         } catch (err) {
+            if (isAuthSessionInvalidError(err) && err.handled) {
+                return;
+            }
             list.innerHTML = '<div class="empty-state">' + icons.empty +
                 '<div class="empty-state-text">' + escapeHtml(t('failed_to_load')) + '</div>' +
                 '<div class="empty-state-sub">' + escapeHtml(err.message) + '</div></div>';
@@ -3594,16 +3639,26 @@ html, body {
         rootPinExpectedLength = 4;
 
         try {
-            var status = await api('GET', '/api/auth/status');
+            var status = await api('GET', '/api/auth/status', null, { handleAuthInvalid: false });
             hasRootPin = !!status.has_root_pin;
             if (status && status.root_pin_length) {
                 rootPinExpectedLength = Math.max(4, Number(status.root_pin_length) || 4);
             }
+            rootUnlocked = !!status.root_unlocked;
             setSafeExtensions(status && status.safe_extensions);
             updateNavigationContextFromResponse(status);
 
-            if (status.root_unlocked) {
-                await api('POST', '/api/auth/lock', {});
+            if (rootUnlocked) {
+                currentPath = currentScope === 'system'
+                    ? normalizeAbsolutePath(currentPath)
+                    : toRootScopePath(currentPath);
+                currentScope = 'system';
+            } else {
+                if (currentScope === 'system') {
+                    currentPath = toSafeScopePath(currentPath);
+                    currentScope = 'storage';
+                }
+                showHiddenFiles = false;
             }
         } catch (err) {
             rootUnlocked = false;
@@ -3618,7 +3673,6 @@ html, body {
             ensureNavigationState();
         }
 
-        rootUnlocked = false;
         if (!canUseRootActions()) {
             showHiddenFiles = false;
         }
@@ -3727,6 +3781,9 @@ html, body {
             await refreshAfterAuthModeChange();
             showToast(t('secure_mode_enabled'), 'info');
         } catch (err) {
+            if (isAuthSessionInvalidError(err) && err.handled) {
+                return;
+            }
             showToast(err.message || t('request_failed'), 'error');
         }
     };
@@ -4065,8 +4122,7 @@ html, body {
             coverEl.style.display = 'none';
         } else {
             // Fetch metadata asynchronously for non-image files
-            fetch('/api/metadata?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope))
-                .then(function(res) { return res.json(); })
+            api('GET', '/api/metadata?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope))
                 .then(function(meta) {
                     if (!currentDetailEntry || currentDetailEntry.path !== path) return;
 
@@ -4095,7 +4151,8 @@ html, body {
                         coverEl.innerHTML = buildCoverPlaceholder(typeClass);
                     }
                 })
-                .catch(function() {
+                .catch(function(err) {
+                    if (isAuthSessionInvalidError(err) && err.handled) return;
                     if (!currentDetailEntry || currentDetailEntry.path !== path) return;
                     coverEl.innerHTML = buildCoverPlaceholder(typeClass);
                 });
@@ -4137,8 +4194,7 @@ html, body {
         document.getElementById('metadataOverlay').classList.add('open');
 
         // Fetch editable metadata
-        fetch('/api/metadata/editable?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope))
-            .then(function(res) { return res.json(); })
+        api('GET', '/api/metadata/editable?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope))
             .then(function(data) {
                 if (!data.editable) {
                     showToast(t('metadata_epub_only'), 'error');
@@ -4151,8 +4207,9 @@ html, body {
                 document.getElementById('metaInputDescription').value = data.description || '';
                 document.getElementById('metaSaveBtn').disabled = false;
             })
-            .catch(function() {
-                showToast(t('metadata_save_failed') + ' ' + t('network_error'), 'error');
+            .catch(function(err) {
+                if (isAuthSessionInvalidError(err) && err.handled) return;
+                showToast(t('metadata_save_failed') + ' ' + (err.message || t('network_error')), 'error');
                 hideMetadataModal();
             });
     };
@@ -4185,25 +4242,20 @@ html, body {
                 description: document.getElementById('metaInputDescription').value
             };
 
-            var res = await fetch('/api/metadata/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            var result = await res.json();
-
-            if (res.ok && result.success) {
+            var result = await api('POST', '/api/metadata/update', payload);
+            if (result.success) {
                 showToast(t('metadata_saved'), 'success');
                 hideMetadataModal();
                 // Refresh the detail view to show updated metadata
                 if (currentDetailEntry) {
                     _showDetailInternal(currentDetailEntry.path);
                 }
-            } else {
-                showToast(t('metadata_save_failed') + ' ' + (result.error || t('server_error')), 'error');
             }
-        } catch (e) {
-            showToast(t('metadata_save_failed') + ' ' + t('network_error'), 'error');
+        } catch (err) {
+            if (isAuthSessionInvalidError(err) && err.handled) {
+                return;
+            }
+            showToast(t('metadata_save_failed') + ' ' + (err.message || t('network_error')), 'error');
         } finally {
             saveBtn.disabled = false;
             saveBtn.textContent = t('metadata_save');
@@ -4732,7 +4784,8 @@ html, body {
                     renderBreadcrumbs(data.breadcrumbs);
                     renderFiles(data.entries);
                     _showDetailInternal(state.path);
-                }).catch(function() {
+                }).catch(function(err) {
+                    if (isAuthSessionInvalidError(err) && err.handled) return;
                     // If loading fails, just navigate to the directory
                     _navigateInternal(parentPath, state.scope);
                 });
@@ -4786,6 +4839,18 @@ html, body {
             return initializeAuthState();
         })
         .then(function() {
+            if (_initDetailPath) {
+                if (rootUnlocked) {
+                    _initDetailPath = _initDetailScope === 'system'
+                        ? normalizeAbsolutePath(_initDetailPath)
+                        : toRootScopePath(_initDetailPath);
+                    _initDetailScope = 'system';
+                } else if (_initDetailScope === 'system') {
+                    _initDetailPath = toSafeScopePath(_initDetailPath);
+                    _initDetailScope = 'storage';
+                }
+            }
+
             if (_initDetailPath && currentScope === _initDetailScope) {
                 history.replaceState(
                     { path: _initDetailPath, scope: currentScope, detail: true },

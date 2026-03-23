@@ -2,6 +2,12 @@ local logger = require("logger")
 local socket = require("socket")
 local UIManager = require("ui/uimanager")
 
+local ROOT_SESSION_COOKIE_NAME = "filesync_root_session"
+local ROOT_SESSION_TTL = 15 * 60
+local UNLOCK_FAILURE_RESET_AFTER = 15 * 60
+local UNLOCK_RATE_LIMIT_TTL = 24 * 60 * 60
+local UNLOCK_BACKOFF_STEPS = {0, 0, 5, 15, 30, 60, 120, 300}
+
 local HttpServer = {
     port = 80,
     root_dir = "/mnt/us",
@@ -9,9 +15,9 @@ local HttpServer = {
     _running = false,
     _static_cache = {},
     _fileops = nil,
-    _root_unlocked = false,
-    _unlock_failed_attempts = 0,
-    _unlock_blocked_until = 0,
+    _root_sessions = nil,
+    _unlock_rate_limits = nil,
+    _random_seeded = false,
 }
 
 function HttpServer:new(o)
@@ -44,9 +50,8 @@ function HttpServer:start()
     server:settimeout(0) -- Non-blocking
     self._server_socket = server
     self._running = true
-    self._root_unlocked = false
-    self._unlock_failed_attempts = 0
-    self._unlock_blocked_until = 0
+    self._root_sessions = {}
+    self._unlock_rate_limits = {}
     logger.info("FileSync HTTP: Listening on port", self.port)
 
     -- Schedule polling via UIManager
@@ -55,9 +60,8 @@ end
 
 function HttpServer:stop()
     self._running = false
-    self._root_unlocked = false
-    self._unlock_failed_attempts = 0
-    self._unlock_blocked_until = 0
+    self._root_sessions = {}
+    self._unlock_rate_limits = {}
     if self._server_socket then
         self._server_socket:close()
         self._server_socket = nil
@@ -99,12 +103,222 @@ function HttpServer:_poll()
     self:_schedulePoll()
 end
 
-function HttpServer:setRootUnlocked(enabled)
-    self._root_unlocked = enabled == true
+function HttpServer:invalidateAllRootSessions()
+    self._root_sessions = {}
 end
 
-function HttpServer:isRootUnlocked()
-    return self._root_unlocked == true
+function HttpServer:_appendHeader(extra_headers, header)
+    local headers = {}
+    if extra_headers then
+        for i = 1, #extra_headers do
+            headers[#headers + 1] = extra_headers[i]
+        end
+    end
+    headers[#headers + 1] = header
+    return headers
+end
+
+function HttpServer:_seedRandom()
+    if self._random_seeded then
+        return
+    end
+
+    local seed = os.time()
+    if socket.gettime then
+        seed = seed + math.floor((socket.gettime() % 1) * 1000000)
+    end
+    math.randomseed(seed)
+    self._random_seeded = true
+
+    -- Discard the first values after seeding to avoid predictable repeats.
+    for _ = 1, 4 do
+        math.random()
+    end
+end
+
+function HttpServer:_generateSessionToken()
+    local bytes = 32
+    local fh = io.open("/dev/urandom", "rb")
+    if fh then
+        local data = fh:read(bytes)
+        fh:close()
+        if data and #data == bytes then
+            return (data:gsub(".", function(char)
+                return string.format("%02x", string.byte(char))
+            end))
+        end
+    end
+
+    self:_seedRandom()
+    local parts = {}
+    for _ = 1, bytes do
+        parts[#parts + 1] = string.format("%02x", math.random(0, 255))
+    end
+    return table.concat(parts)
+end
+
+function HttpServer:_parseCookies(cookie_header)
+    local cookies = {}
+    if not cookie_header or cookie_header == "" then
+        return cookies
+    end
+
+    for pair in cookie_header:gmatch("[^;]+") do
+        local key, value = pair:match("^%s*([^=]+)%s*=%s*(.-)%s*$")
+        if key and value then
+            cookies[key] = value
+        end
+    end
+    return cookies
+end
+
+function HttpServer:_getRequestToken(headers, query)
+    if headers then
+        local header_token = headers["x-filesync-token"]
+        if header_token and header_token ~= "" then
+            return header_token
+        end
+
+        local authorization = headers["authorization"]
+        if authorization then
+            local bearer_token = authorization:match("^[Bb]earer%s+(.+)$")
+            if bearer_token and bearer_token ~= "" then
+                return bearer_token
+            end
+        end
+
+        if query and query.token and query.token ~= "" then
+            return query.token
+        end
+
+        local cookies = self:_parseCookies(headers["cookie"])
+        local cookie_token = cookies[ROOT_SESSION_COOKIE_NAME]
+        if cookie_token and cookie_token ~= "" then
+            return cookie_token
+        end
+    end
+
+    return nil
+end
+
+function HttpServer:_getClientIP(client)
+    local ok, ip = pcall(function()
+        return client:getpeername()
+    end)
+    if ok and ip and ip ~= "" then
+        return tostring(ip)
+    end
+    return ""
+end
+
+function HttpServer:_pruneRootSessions()
+    local sessions = self._root_sessions
+    if not sessions then
+        self._root_sessions = {}
+        return
+    end
+
+    local now = self:_getNow()
+    for token, session in pairs(sessions) do
+        if not session or not session.expires_at or session.expires_at <= now then
+            sessions[token] = nil
+        end
+    end
+end
+
+function HttpServer:_createRootSession(client_ip)
+    self:_pruneRootSessions()
+
+    local token
+    repeat
+        token = self:_generateSessionToken()
+    until self._root_sessions[token] == nil
+
+    local expires_at = self:_getNow() + ROOT_SESSION_TTL
+    self._root_sessions[token] = {
+        client_ip = client_ip or "",
+        expires_at = expires_at,
+    }
+    return token, math.ceil(expires_at - self:_getNow())
+end
+
+function HttpServer:_invalidateRootSession(token)
+    if token and self._root_sessions then
+        self._root_sessions[token] = nil
+    end
+end
+
+function HttpServer:_buildSessionCookie(token)
+    return "Set-Cookie: " .. ROOT_SESSION_COOKIE_NAME .. "=" .. token
+        .. "; Path=/; HttpOnly; SameSite=Strict"
+end
+
+function HttpServer:_buildClearedSessionCookie()
+    return "Set-Cookie: " .. ROOT_SESSION_COOKIE_NAME .. "="
+        .. "; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+end
+
+function HttpServer:_getRequestSession(headers, query, client_ip)
+    self:_pruneRootSessions()
+
+    local token = self:_getRequestToken(headers, query)
+    if not token then
+        return {
+            token = nil,
+            has_token = false,
+            valid = false,
+            invalid = false,
+            clear_cookie = false,
+            expires_in = 0,
+        }
+    end
+
+    local session = self._root_sessions and self._root_sessions[token]
+    if not session then
+        return {
+            token = token,
+            has_token = true,
+            valid = false,
+            invalid = true,
+            clear_cookie = true,
+            expires_in = 0,
+        }
+    end
+
+    local now = self:_getNow()
+    if not session.expires_at or session.expires_at <= now then
+        self._root_sessions[token] = nil
+        return {
+            token = token,
+            has_token = true,
+            valid = false,
+            invalid = true,
+            clear_cookie = true,
+            expires_in = 0,
+        }
+    end
+
+    if session.client_ip ~= "" and client_ip ~= "" and session.client_ip ~= client_ip then
+        self._root_sessions[token] = nil
+        return {
+            token = token,
+            has_token = true,
+            valid = false,
+            invalid = true,
+            clear_cookie = true,
+            expires_in = 0,
+        }
+    end
+
+    session.expires_at = now + ROOT_SESSION_TTL
+    return {
+        token = token,
+        has_token = true,
+        valid = true,
+        invalid = false,
+        clear_cookie = false,
+        expires_in = math.ceil(session.expires_at - now),
+    }
 end
 
 function HttpServer:_getNow()
@@ -114,27 +328,182 @@ function HttpServer:_getNow()
     return os.time()
 end
 
-function HttpServer:_resetUnlockAttempts()
-    self._unlock_failed_attempts = 0
-    self._unlock_blocked_until = 0
+function HttpServer:_pruneUnlockRateLimits()
+    local rate_limits = self._unlock_rate_limits
+    if not rate_limits then
+        self._unlock_rate_limits = {}
+        return
+    end
+
+    local now = self:_getNow()
+    for key, entry in pairs(rate_limits) do
+        local failures = entry and entry.failures or 0
+        local blocked_until = entry and entry.blocked_until or 0
+        local updated_at = entry and entry.updated_at or 0
+        local last_failure_at = entry and entry.last_failure_at or 0
+        local expired_state = updated_at > 0 and (now - updated_at) >= UNLOCK_RATE_LIMIT_TTL
+        local reset_window_elapsed = last_failure_at > 0 and (now - last_failure_at) >= UNLOCK_FAILURE_RESET_AFTER
+        local block_expired = blocked_until <= now
+
+        if expired_state or (failures <= 0 and block_expired) or (reset_window_elapsed and block_expired) then
+            rate_limits[key] = nil
+        end
+    end
 end
 
-function HttpServer:_getUnlockRetryAfter()
-    local remaining = self._unlock_blocked_until - self:_getNow()
-    if remaining <= 0 then
+function HttpServer:_buildUnlockRateLimitKey(prefix, value)
+    if value == nil then
+        return nil
+    end
+
+    value = tostring(value):gsub("^%s+", ""):gsub("%s+$", "")
+    if value == "" then
+        return nil
+    end
+    if #value > 160 then
+        value = value:sub(1, 160)
+    end
+    return prefix .. value
+end
+
+function HttpServer:_getUnlockRateLimitKeys(auth_session, client_ip, headers)
+    local keys = {}
+    local seen = {}
+
+    local function addKey(key)
+        if key and not seen[key] then
+            seen[key] = true
+            keys[#keys + 1] = key
+        end
+    end
+
+    addKey(self:_buildUnlockRateLimitKey("ip:", client_ip))
+
+    if auth_session and auth_session.has_token and auth_session.token then
+        addKey(self:_buildUnlockRateLimitKey("session:", auth_session.token))
+    end
+
+    if #keys == 0 and headers then
+        addKey(self:_buildUnlockRateLimitKey("ua:", headers["user-agent"]))
+    end
+
+    if #keys == 0 then
+        keys[1] = "unlock:fallback"
+    end
+
+    return keys
+end
+
+function HttpServer:_getUnlockBackoffSeconds(failures)
+    failures = math.max(0, math.floor(tonumber(failures) or 0))
+    if failures <= 0 then
         return 0
     end
-    return math.ceil(remaining)
+    local index = math.min(failures, #UNLOCK_BACKOFF_STEPS)
+    return UNLOCK_BACKOFF_STEPS[index] or UNLOCK_BACKOFF_STEPS[#UNLOCK_BACKOFF_STEPS]
 end
 
-function HttpServer:_registerUnlockFailure()
-    self._unlock_failed_attempts = (self._unlock_failed_attempts or 0) + 1
-    if self._unlock_failed_attempts >= 3 then
-        self._unlock_failed_attempts = 0
-        self._unlock_blocked_until = self:_getNow() + 5
-        return true, self:_getUnlockRetryAfter()
+function HttpServer:_resetUnlockAttempts(keys)
+    if not keys then
+        self._unlock_rate_limits = {}
+        return
     end
-    return false, 0
+
+    if not self._unlock_rate_limits then
+        self._unlock_rate_limits = {}
+        return
+    end
+
+    for _, key in ipairs(keys) do
+        self._unlock_rate_limits[key] = nil
+    end
+end
+
+function HttpServer:_getUnlockThrottleInfo(keys)
+    self:_pruneUnlockRateLimits()
+
+    local rate_limits = self._unlock_rate_limits
+    if not rate_limits then
+        return false, 0, 0
+    end
+
+    local now = self:_getNow()
+    local max_retry_after = 0
+    local max_failures = 0
+
+    for _, key in ipairs(keys or {}) do
+        local entry = rate_limits[key]
+        if entry then
+            local failures = entry.failures or 0
+            if failures > max_failures then
+                max_failures = failures
+            end
+
+            local blocked_until = entry.blocked_until or 0
+            if blocked_until > now then
+                local retry_after = math.ceil(blocked_until - now)
+                if retry_after > max_retry_after then
+                    max_retry_after = retry_after
+                end
+            end
+        end
+    end
+
+    return max_retry_after > 0, max_retry_after, max_failures
+end
+
+function HttpServer:_registerUnlockFailure(keys)
+    self:_pruneUnlockRateLimits()
+
+    if not self._unlock_rate_limits then
+        self._unlock_rate_limits = {}
+    end
+
+    local now = self:_getNow()
+    local max_retry_after = 0
+    local max_failures = 0
+
+    for _, key in ipairs(keys or {}) do
+        local entry = self._unlock_rate_limits[key]
+        if not entry then
+            entry = {
+                failures = 0,
+                blocked_until = 0,
+                last_failure_at = 0,
+                updated_at = now,
+            }
+            self._unlock_rate_limits[key] = entry
+        end
+
+        local blocked_until = entry.blocked_until or 0
+        local last_failure_at = entry.last_failure_at or 0
+        if blocked_until <= now
+            and last_failure_at > 0
+            and (now - last_failure_at) >= UNLOCK_FAILURE_RESET_AFTER then
+            entry.failures = 0
+            entry.blocked_until = 0
+        end
+
+        entry.failures = (entry.failures or 0) + 1
+        entry.last_failure_at = now
+        entry.updated_at = now
+
+        local backoff = self:_getUnlockBackoffSeconds(entry.failures)
+        if backoff > 0 then
+            entry.blocked_until = now + backoff
+            if backoff > max_retry_after then
+                max_retry_after = backoff
+            end
+        else
+            entry.blocked_until = 0
+        end
+
+        if entry.failures > max_failures then
+            max_failures = entry.failures
+        end
+    end
+
+    return max_retry_after > 0, max_retry_after, max_failures
 end
 
 function HttpServer:_getSessionSafeMode(has_root_pin, root_unlocked)
@@ -226,7 +595,7 @@ function HttpServer:_handleClient(client)
     local query = self:_parseQuery(query_string or "")
 
     -- Route the request
-    self:_route(client, method, path_part, query, headers, body)
+    self:_route(client, method, path_part, query, headers, body, self:_getClientIP(client))
 end
 
 function HttpServer:_readBody(client, length)
@@ -250,15 +619,11 @@ function HttpServer:_readBody(client, length)
     return table.concat(parts)
 end
 
-function HttpServer:_route(client, method, path, query, headers, body)
+function HttpServer:_route(client, method, path, query, headers, body, client_ip)
     -- Handle CORS preflight
     if method == "OPTIONS" then
         local resp = table.concat({
             "HTTP/1.1 204 No Content\r\n",
-            "Access-Control-Allow-Origin: *\r\n",
-            "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n",
-            "Access-Control-Allow-Headers: Content-Type\r\n",
-            "Access-Control-Max-Age: 86400\r\n",
             "Content-Length: 0\r\n",
             "Connection: close\r\n",
             "\r\n",
@@ -284,8 +649,10 @@ function HttpServer:_route(client, method, path, query, headers, body)
         local FileOps = self._fileops
         local FileSyncManager = require("filesync/filesyncmanager")
         local has_root_pin = FileSyncManager:hasRootPin()
-        local root_unlocked = self:isRootUnlocked()
+        local auth_session = self:_getRequestSession(headers, query, client_ip)
+        local root_unlocked = auth_session.valid
         local session_safe_mode = self:_getSessionSafeMode(has_root_pin, root_unlocked)
+        local invalid_session_headers = auth_session.clear_cookie and { self:_buildClearedSessionCookie() } or nil
 
         -- Language endpoint for web UI i18n
         if method == "GET" and path == "/api/lang" then
@@ -300,55 +667,83 @@ function HttpServer:_route(client, method, path, query, headers, body)
                 has_root_pin = has_root_pin,
                 root_unlocked = root_unlocked,
                 root_pin_length = FileSyncManager:getRootPinLength(),
+                session_invalid = auth_session.invalid,
+                session_expires_in = auth_session.valid and auth_session.expires_in or 0,
                 safe_extensions = FileOps:getSafeExtensions(),
                 default_scope = navigation.default_scope,
                 available_scopes = navigation.available_scopes,
                 can_show_hidden = navigation.can_show_hidden,
                 safe_root_path = navigation.safe_root_path,
                 root_start_path = navigation.root_start_path,
-            })
+            }, invalid_session_headers)
+            return
+        end
+
+        if auth_session.invalid
+            and path ~= "/api/auth/unlock"
+            and path ~= "/api/auth/lock" then
+            self:_sendJSON(client, 401, {
+                error = "Authentication session expired",
+                code = "auth_session_invalid",
+            }, invalid_session_headers)
             return
         end
 
         if method == "POST" and path == "/api/auth/unlock" then
             local data = self:_parseJSON(body)
+            local unlock_keys = self:_getUnlockRateLimitKeys(auth_session, client_ip, headers)
+            local throttled, retry_after = self:_getUnlockThrottleInfo(unlock_keys)
             if not has_root_pin then
-                self:setRootUnlocked(false)
-                self:_sendJSON(client, 400, {error = "Root PIN is not configured", code = "root_pin_missing"})
+                self:_sendJSON(client, 400, {
+                    error = "Root PIN is not configured",
+                    code = "root_pin_missing",
+                }, invalid_session_headers)
             elseif not data or data.pin == nil then
-                self:setRootUnlocked(false)
-                self:_sendJSON(client, 400, {error = "Missing pin", code = "missing_pin"})
-            elseif self:_getUnlockRetryAfter() > 0 then
-                self:setRootUnlocked(false)
+                self:_sendJSON(client, 400, {
+                    error = "Missing pin",
+                    code = "missing_pin",
+                }, invalid_session_headers)
+            elseif throttled then
                 self:_sendJSON(client, 429, {
                     error = "Too many attempts. Try again soon.",
                     code = "auth_throttled",
-                    retry_after = self:_getUnlockRetryAfter(),
-                })
+                    retry_after = retry_after,
+                }, self:_appendHeader(invalid_session_headers, "Retry-After: " .. retry_after))
             elseif FileSyncManager:verifyRootPin(data.pin) then
-                self:setRootUnlocked(true)
-                self:_resetUnlockAttempts()
-                self:_sendJSON(client, 200, {success = true, root_unlocked = true})
+                self:_invalidateRootSession(auth_session.token)
+                local token, expires_in = self:_createRootSession(client_ip)
+                self:_resetUnlockAttempts(unlock_keys)
+                self:_sendJSON(client, 200, {
+                    success = true,
+                    root_unlocked = true,
+                    session_expires_in = expires_in,
+                }, { self:_buildSessionCookie(token) })
             else
-                self:setRootUnlocked(false)
-                local throttled, retry_after = self:_registerUnlockFailure()
-                if throttled then
+                local now_throttled, retry_after_after_failure, failure_count = self:_registerUnlockFailure(unlock_keys)
+                if now_throttled then
                     self:_sendJSON(client, 429, {
                         error = "Too many attempts. Try again soon.",
                         code = "auth_throttled",
-                        retry_after = retry_after,
-                    })
+                        retry_after = retry_after_after_failure,
+                        failed_attempts = failure_count,
+                    }, self:_appendHeader(invalid_session_headers, "Retry-After: " .. retry_after_after_failure))
                 else
-                    self:_sendJSON(client, 403, {error = "Invalid Root PIN", code = "invalid_root_pin"})
+                    self:_sendJSON(client, 403, {
+                        error = "Invalid Root PIN",
+                        code = "invalid_root_pin",
+                        failed_attempts = failure_count,
+                    }, invalid_session_headers)
                 end
             end
             return
         end
 
         if method == "POST" and path == "/api/auth/lock" then
-            self:setRootUnlocked(false)
-            self:_resetUnlockAttempts()
-            self:_sendJSON(client, 200, {success = true, root_unlocked = false})
+            self:_invalidateRootSession(auth_session.token)
+            self:_sendJSON(client, 200, {
+                success = true,
+                root_unlocked = false,
+            }, { self:_buildClearedSessionCookie() })
             return
         end
 
@@ -654,26 +1049,32 @@ function HttpServer:_sendAll(client, data)
     return sent
 end
 
-function HttpServer:_sendJSON(client, status, data)
+function HttpServer:_sendJSON(client, status, data, extra_headers)
     local json_body = self:_encodeJSON(data)
     local status_text = ({
         [200] = "OK",
+        [401] = "Unauthorized",
         [400] = "Bad Request",
         [403] = "Forbidden",
         [404] = "Not Found",
+        [429] = "Too Many Requests",
         [500] = "Internal Server Error",
     })[status] or "OK"
 
-    local response = table.concat({
+    local parts = {
         "HTTP/1.1 " .. status .. " " .. status_text .. "\r\n",
         "Content-Type: application/json; charset=utf-8\r\n",
         "Content-Length: " .. #json_body .. "\r\n",
         "Connection: close\r\n",
-        "Access-Control-Allow-Origin: *\r\n",
-        "\r\n",
-        json_body,
-    })
-    self:_sendAll(client, response)
+    }
+    if extra_headers then
+        for _, header in ipairs(extra_headers) do
+            parts[#parts + 1] = header .. "\r\n"
+        end
+    end
+    parts[#parts + 1] = "\r\n"
+    parts[#parts + 1] = json_body
+    self:_sendAll(client, table.concat(parts))
 end
 
 function HttpServer:_sendError(client, status, message)

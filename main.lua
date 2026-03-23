@@ -1,11 +1,32 @@
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local ok_i18n, plugin_gettext = pcall(require, "filesync/filesync_i18n")
 local _ = ok_i18n and plugin_gettext or require("gettext")
+local T = require("ffi/util").template
 
 local FileSync = WidgetContainer:extend{
     name = "filesync",
     is_doc_only = false,
 }
+
+local plugin_meta_cache = nil
+
+local function getPluginMeta()
+    if plugin_meta_cache ~= nil then
+        return plugin_meta_cache or nil
+    end
+
+    local info = debug.getinfo(1, "S")
+    local script_path = info and info.source and info.source:match("@(.+)")
+    local plugin_dir = script_path and script_path:match("(.+)/[^/]+$") or "."
+    local ok, meta = pcall(dofile, plugin_dir .. "/_meta.lua")
+    if ok and type(meta) == "table" then
+        plugin_meta_cache = meta
+    else
+        plugin_meta_cache = false
+    end
+
+    return plugin_meta_cache or nil
+end
 
 function FileSync:init()
     self.ui.menu:registerToMainMenu(self)
@@ -77,8 +98,10 @@ function FileSync:addToMainMenu(menu_items)
         callback = function()
             local UIManager = require("ui/uimanager")
             local InfoMessage = require("ui/widget/infomessage")
+            local meta = getPluginMeta() or {}
+            local version = meta.version or "dev"
             UIManager:show(InfoMessage:new{
-                text = _("FileSync v1.0.0\n\nWireless file manager for KOReader.\n\nStart the server, scan the QR code with your phone, and manage your books from any browser on the same WiFi network.\n\nProject:\ngithub.com/abrahamnm/filesync.koplugin"),
+                text = T(_("FileSync v%1\n\nWireless file manager for KOReader.\n\nStart the server, scan the QR code with your phone, and manage your books from any browser on the same WiFi network.\n\nProject:\ngithub.com/TavaresBugs/filesync.koplugin"), version),
             })
         end,
         keep_menu_open = true,
@@ -95,7 +118,7 @@ function FileSync:onSuspend()
     local FileSyncManager = require("filesync/filesyncmanager")
     if FileSyncManager:isRunning() then
         FileSyncManager._was_running_before_suspend = true
-        FileSyncManager:stop(true) -- silent stop
+        FileSyncManager:stop(true, false, true) -- silent stop, preserve restart intent
     end
 end
 

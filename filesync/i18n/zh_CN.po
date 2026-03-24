@@ -44,8 +44,8 @@ msgstr "保存"
 msgid "Port set to %1. Restart the server for changes to take effect."
 msgstr "端口已设置为 %1。请重启服务器以使更改生效。"
 
-msgid "Invalid port. Please enter a number between 1024 and 65535."
-msgstr "无效的端口。请输入 1024 到 65535 之间的数字。"
+msgid "Invalid port. Please enter 80 or a number between 1024 and 65535."
+msgstr "无效的端口。请输入 80 或 1024 到 65535 之间的数字。"
 
 msgid "FileSync server is already running."
 msgstr "FileSync 服务器已在运行。"

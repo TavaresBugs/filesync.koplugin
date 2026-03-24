@@ -172,7 +172,7 @@ function FileSyncManager:configurePort()
                     is_enter_default = true,
                     callback = function()
                         local new_port = tonumber(port_dialog:getInputText())
-                        if new_port and new_port >= 1024 and new_port <= 65535 then
+                        if new_port and ((new_port == 80) or (new_port >= 1024 and new_port <= 65535)) then
                             self:setPort(new_port)
                             UIManager:close(port_dialog)
                             UIManager:show(InfoMessage:new{
@@ -181,7 +181,7 @@ function FileSyncManager:configurePort()
                             })
                         else
                             UIManager:show(InfoMessage:new{
-                                text = _("Invalid port. Please enter a number between 1024 and 65535."),
+                                text = _("Invalid port. Please enter 80 or a number between 1024 and 65535."),
                                 timeout = 3,
                             })
                         end

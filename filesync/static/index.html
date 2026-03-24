@@ -151,6 +151,13 @@ html, body {
     border-radius: var(--radius-xs);
     transition: all var(--transition);
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+}
+
+.breadcrumb-item svg {
+    width: 16px;
+    height: 16px;
 }
 
 .breadcrumb-item:hover {
@@ -1904,12 +1911,18 @@ html, body {
 
     // ===== Icons =====
     var icons = {
+        home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5L12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/><path d="M10 20v-6h4v6"/></svg>',
         dir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>',
         ebook: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
         document: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
         image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
         file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 12 10 16 18 8"/></svg>',
+        eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+        eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+        viewList: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
+        viewGrid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="6" rx="1.4"/><rect x="13" y="4" width="8" height="6" rx="1.4"/><rect x="3" y="13" width="8" height="8" rx="1.4"/><rect x="13" y="13" width="8" height="8" rx="1.4"/></svg>',
+        viewGridLarge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.2"/><rect x="14" y="4" width="6" height="6" rx="1.2"/><rect x="4" y="14" width="6" height="6" rx="1.2"/><rect x="14" y="14" width="6" height="6" rx="1.2"/></svg>',
         download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
         rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>',
         trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
@@ -1957,11 +1970,23 @@ html, body {
         }
     }
 
+    function getViewModeLabel(mode) {
+        if (mode === 'grid-large') return t('grid_large_view');
+        if (mode === 'grid') return t('grid_view');
+        return t('list_view');
+    }
+
+    function getViewModeIcon(mode) {
+        if (mode === 'grid-large') return icons.viewGridLarge;
+        if (mode === 'grid') return icons.viewGrid;
+        return icons.viewList;
+    }
+
     function updateViewModeUI() {
         var btn = document.getElementById('btnViewMode');
         if (!btn) return;
-        var label = t(viewMode === 'grid' ? 'grid_view' : (viewMode === 'grid-large' ? 'grid_large_view' : 'list_view'));
-        btn.textContent = label;
+        var label = getViewModeLabel(viewMode);
+        btn.innerHTML = getViewModeIcon(viewMode) + '<span>' + escapeHtml(label) + '</span>';
         btn.title = label;
         btn.setAttribute('aria-label', label);
         setFileListViewMode();
@@ -2004,7 +2029,7 @@ html, body {
 
         if (hiddenBtn) {
             var hiddenLabel = showHiddenFiles ? t('hide_hidden_files') : t('show_hidden_files');
-            hiddenBtn.textContent = hiddenLabel;
+            hiddenBtn.innerHTML = (showHiddenFiles ? icons.eye : icons.eyeOff) + '<span>' + escapeHtml(hiddenLabel) + '</span>';
             hiddenBtn.title = hiddenLabel;
             hiddenBtn.setAttribute('aria-label', hiddenLabel);
             hiddenBtn.hidden = !canShowHidden;
@@ -2013,13 +2038,17 @@ html, body {
     }
 
     function buildHistoryURL(path, scope, detail) {
-        var params = new URLSearchParams();
-        params.set('path', path || '/');
-        params.set('scope', normalizeScope(scope || currentScope || defaultScope));
-        if (detail) {
-            params.set('detail', '1');
+        var resolvedScope = normalizeScope(scope || currentScope || defaultScope);
+        var normalizedPath = path || '/';
+        if (normalizedPath.charAt(0) !== '/') {
+            normalizedPath = '/' + normalizedPath;
         }
-        return '#' + params.toString();
+        var encodedPath = encodeURI(normalizedPath);
+        var detailSuffix = detail ? '!detail' : '';
+        if (resolvedScope === 'system') {
+            return '#system:' + encodedPath + detailSuffix;
+        }
+        return '#' + encodedPath + detailSuffix;
     }
 
     function replaceCurrentHistoryState(detailPath) {
@@ -2122,10 +2151,13 @@ html, body {
             if (i > 0) html += '<span class="breadcrumb-sep">/</span>';
             var isLast = i === crumbs.length - 1;
             var displayName = crumbs[i].name;
-            if (displayName === "Home") displayName = t('home');
-            html += '<span class="breadcrumb-item' + (isLast ? ' active' : '') + '"' +
-                     (isLast ? '' : ' onclick="navigate(\'' + escapeAttr(crumbs[i].path) + '\', \'' + escapeAttr(currentScope) + '\')"') +
-                     '>' + escapeHtml(displayName) + '</span>';
+            var classes = 'breadcrumb-item' + (isLast ? ' active' : '');
+            var attrs = isLast ? '' : ' onclick="navigate(\'' + escapeAttr(crumbs[i].path) + '\', \'' + escapeAttr(currentScope) + '\')"';
+            if (displayName === "Home") {
+                html += '<span class="' + classes + '"' + attrs + ' title="' + escapeHtml(t('home')) + '" aria-label="' + escapeHtml(t('home')) + '">' + icons.home + '</span>';
+                continue;
+            }
+            html += '<span class="' + classes + '"' + attrs + '>' + escapeHtml(displayName) + '</span>';
         }
         el.innerHTML = html;
     }
@@ -3132,10 +3164,20 @@ html, body {
         }
 
         try { raw = decodeURIComponent(raw); } catch (e) {}
+        var detail = false;
         if (raw.endsWith('!detail')) {
-            return normalizeNavigationTarget(raw.substring(0, raw.length - 7) || '/', currentScope || defaultScope, true);
+            detail = true;
+            raw = raw.substring(0, raw.length - 7);
         }
-        return normalizeNavigationTarget(raw || '/', currentScope || defaultScope, false);
+        var scope = currentScope || defaultScope || 'storage';
+        if (raw.indexOf('system:') === 0) {
+            scope = 'system';
+            raw = raw.substring(7);
+        } else if (raw.indexOf('storage:') === 0) {
+            scope = 'storage';
+            raw = raw.substring(8);
+        }
+        return normalizeNavigationTarget(raw || '/', scope, detail);
     }
 
     window.addEventListener('popstate', function(event) {

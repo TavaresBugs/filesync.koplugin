@@ -5,7 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="color-scheme" content="light dark">
 <title data-i18n="filesync">FileSync</title>
+<script>
+(function() {
+    try {
+        var storedTheme = localStorage.getItem("filesync_theme");
+        var initialTheme = storedTheme === "light" || storedTheme === "dark"
+            ? storedTheme
+            : "light";
+        document.documentElement.setAttribute("data-theme", initialTheme);
+    } catch (e) {}
+})();
+</script>
 <style>
 *, *::before, *::after {
     box-sizing: border-box;
@@ -17,6 +29,7 @@
     --bg: #f7f8fa;
     --surface: #ffffff;
     --surface-hover: #f0f2f5;
+    --surface-raised: #ffffff;
     --border: #e2e5e9;
     --border-light: #eef0f3;
     --text: #1a1d23;
@@ -32,6 +45,29 @@
     --success-light: #f0fdf4;
     --warning: #f59e0b;
     --warning-light: #fffbeb;
+    --focus-ring: rgba(59, 130, 246, 0.1);
+    --selection-bar-surface: rgba(255, 255, 255, 0.88);
+    --selection-bar-border: rgba(226, 229, 233, 0.92);
+    --selection-bar-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+    --selection-action-bg: rgba(255, 255, 255, 0.72);
+    --selection-action-hover-bg: #eff6ff;
+    --selection-action-danger-bg: #fff1f2;
+    --selection-action-danger-hover-bg: #ffe4e6;
+    --selection-close-bg: #1f2937;
+    --selection-close-color: #fff;
+    --layout-max-width: 920px;
+    --file-icon-dir-bg: #fef3c7;
+    --file-icon-dir-text: #d97706;
+    --file-icon-hidden-dir-bg: #edf7ee;
+    --file-icon-hidden-dir-text: #4b6b46;
+    --file-hidden-name: #3f4f3d;
+    --file-hidden-meta: #7b8a78;
+    --file-icon-document-bg: #f0fdf4;
+    --file-icon-document-text: #16a34a;
+    --file-icon-image-bg: #fdf2f8;
+    --file-icon-image-text: #db2777;
+    --file-icon-file-bg: #f1f5f9;
+    --file-icon-file-text: #64748b;
     --radius: 12px;
     --radius-sm: 8px;
     --radius-xs: 6px;
@@ -39,6 +75,53 @@
     --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
     --shadow-lg: 0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
     --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] {
+    --bg: #0d1118;
+    --surface: #171c24;
+    --surface-hover: #202733;
+    --surface-raised: #1f2632;
+    --border: #2d3541;
+    --border-light: #252d39;
+    --text: #e5e7eb;
+    --text-secondary: #a8b1bd;
+    --text-tertiary: #7b8694;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-light: #22324d;
+    --danger: #ca666a;
+    --danger-hover: #d9767a;
+    --danger-light: #59252b;
+    --success: #4ade80;
+    --success-light: #183b2f;
+    --warning: #f4c66d;
+    --warning-light: #5f3c1f;
+    --focus-ring: rgba(127, 176, 255, 0.18);
+    --selection-bar-surface: rgba(23, 28, 36, 0.88);
+    --selection-bar-border: rgba(82, 97, 119, 0.62);
+    --selection-bar-shadow: 0 22px 46px rgba(0, 0, 0, 0.38);
+    --selection-action-bg: rgba(45, 57, 74, 0.82);
+    --selection-action-hover-bg: rgba(34, 50, 77, 0.96);
+    --selection-action-danger-bg: rgba(89, 37, 43, 0.92);
+    --selection-action-danger-hover-bg: rgba(118, 48, 57, 0.98);
+    --selection-close-bg: #0f172a;
+    --selection-close-color: #f8fafc;
+    --file-icon-dir-bg: #6a4525;
+    --file-icon-dir-text: #f2ca7a;
+    --file-icon-hidden-dir-bg: #1a3a31;
+    --file-icon-hidden-dir-text: #88ddb3;
+    --file-hidden-name: #d1fae5;
+    --file-hidden-meta: #7fb39a;
+    --file-icon-document-bg: #173d31;
+    --file-icon-document-text: #63d39a;
+    --file-icon-image-bg: #5a2440;
+    --file-icon-image-text: #f2a8cc;
+    --file-icon-file-bg: #2d394a;
+    --file-icon-file-text: #a9b8cb;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
 }
 
 html, body {
@@ -51,6 +134,7 @@ html, body {
     overflow-x: hidden;
     min-height: 100vh;
     min-height: -webkit-fill-available;
+    transition: background-color var(--transition), color var(--transition);
 }
 
 /* ===== Header ===== */
@@ -65,7 +149,7 @@ html, body {
 }
 
 .header-inner {
-    max-width: 800px;
+    max-width: var(--layout-max-width);
     margin: 0 auto;
     display: flex;
     align-items: center;
@@ -90,13 +174,57 @@ html, body {
     color: var(--primary);
 }
 
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    min-width: 0;
+}
+
 .header-actions {
     display: flex;
     gap: 8px;
     align-items: center;
 }
 
+.theme-toggle {
+    width: 32px;
+    min-width: 32px;
+    height: 30px;
+    padding: 0;
+    gap: 0;
+}
+
+.theme-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.theme-toggle svg {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.theme-toggle .theme-icon {
+    display: none;
+}
+
+.theme-toggle[data-theme-state="dark"] .theme-icon-dark,
+.theme-toggle[data-theme-state="light"] .theme-icon-light {
+    display: block;
+}
+
 @media (max-width: 640px) {
+    .header-controls {
+        gap: 6px;
+    }
+
     .header-actions {
         gap: 6px;
     }
@@ -108,11 +236,39 @@ html, body {
     .header-actions .btn span {
         display: none;
     }
+
+    .theme-toggle {
+        width: 30px;
+        min-width: 30px;
+        height: 30px;
+    }
+}
+
+@media (max-width: 860px) {
+    .header {
+        padding: 10px 12px;
+    }
+
+    .header-inner {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .header-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
 }
 
 /* ===== Breadcrumbs ===== */
 .breadcrumbs-wrap {
-    max-width: 800px;
+    max-width: var(--layout-max-width);
     margin: 0 auto;
     padding: 12px 16px 4px;
     display: flex;
@@ -184,7 +340,7 @@ html, body {
 
 /* ===== Toolbar ===== */
 .toolbar {
-    max-width: 800px;
+    max-width: var(--layout-max-width);
     margin: 0 auto;
     padding: 8px 16px;
     display: flex;
@@ -360,7 +516,7 @@ html, body {
 
 /* ===== File List ===== */
 .file-list {
-    max-width: 800px;
+    max-width: var(--layout-max-width);
     margin: 0 auto;
     padding: 4px 16px 100px;
 }
@@ -432,11 +588,11 @@ html, body {
 }
 
 .file-item.is-hidden .file-name {
-    color: var(--text-secondary);
+    color: var(--file-hidden-name);
 }
 
 .file-item.is-hidden .file-meta {
-    color: var(--text-tertiary);
+    color: var(--file-hidden-meta);
 }
 
 .file-icon {
@@ -455,8 +611,8 @@ html, body {
 }
 
 .file-icon.dir {
-    background: #fef3c7;
-    color: #d97706;
+    background: var(--file-icon-dir-bg);
+    color: var(--file-icon-dir-text);
 }
 
 .file-icon.ebook {
@@ -465,18 +621,23 @@ html, body {
 }
 
 .file-icon.document {
-    background: #f0fdf4;
-    color: #16a34a;
+    background: var(--file-icon-document-bg);
+    color: var(--file-icon-document-text);
 }
 
 .file-icon.image {
-    background: #fdf2f8;
-    color: #db2777;
+    background: var(--file-icon-image-bg);
+    color: var(--file-icon-image-text);
 }
 
 .file-icon.file {
-    background: #f1f5f9;
-    color: #64748b;
+    background: var(--file-icon-file-bg);
+    color: var(--file-icon-file-text);
+}
+
+.file-item.is-hidden .file-icon.dir {
+    background: var(--file-icon-hidden-dir-bg);
+    color: var(--file-icon-hidden-dir-text);
 }
 
 .file-info {
@@ -620,7 +781,7 @@ html, body {
 
 /* ===== Drop Zone ===== */
 .dropzone {
-    max-width: 800px;
+    max-width: var(--layout-max-width);
     margin: 0 auto;
     padding: 0 16px;
 }
@@ -760,7 +921,7 @@ html, body {
 
 /* ===== Upload Progress ===== */
 .upload-progress {
-    max-width: 800px;
+    max-width: var(--layout-max-width);
     margin: 0 auto;
     padding: 0 16px;
 }
@@ -827,25 +988,29 @@ html, body {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 16px;
+    bottom: max(12px, calc(env(safe-area-inset-bottom, 0px) + 8px));
     z-index: 140;
-    padding: 0 16px;
+    padding: 0 12px;
     pointer-events: none;
 }
 
 .selection-bar {
-    max-width: 800px;
+    width: fit-content;
+    max-width: min(calc(100vw - 24px), 560px);
     margin: 0 auto;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-lg);
-    padding: 12px;
+    background: var(--selection-bar-surface);
+    border: 1px solid var(--selection-bar-border);
+    border-radius: 999px;
+    box-shadow: var(--selection-bar-shadow);
+    padding: 10px 14px 10px 16px;
     display: none;
+    position: relative;
+    overflow: visible;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     pointer-events: auto;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
 }
 
 .selection-bar.visible {
@@ -853,27 +1018,205 @@ html, body {
 }
 
 .selection-bar-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.selection-bar-count {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.selection-bar-label {
+    font-size: 13px;
+    font-weight: 700;
     color: var(--text);
+    white-space: nowrap;
+}
+
+.selection-bar-label-short {
+    display: none;
+}
+
+.selection-bar-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border-light);
+    opacity: 0.9;
+    margin: 4px 4px 4px 2px;
 }
 
 .selection-bar-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    gap: 10px;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.selection-action {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 58px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: transform var(--transition), opacity var(--transition);
+}
+
+.selection-action:disabled {
+    opacity: 0.42;
+    cursor: default;
+    pointer-events: none;
+}
+
+.selection-action-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    background: var(--selection-action-bg);
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color var(--transition), color var(--transition), transform var(--transition);
+}
+
+.selection-action svg {
+    width: 16px;
+    height: 16px;
+}
+
+.selection-action-label {
+    font-size: 9px;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.selection-action:hover .selection-action-icon {
+    background: var(--selection-action-hover-bg);
+    color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.selection-action:hover .selection-action-label {
+    color: var(--primary);
+}
+
+.selection-action-danger .selection-action-icon {
+    background: var(--selection-action-danger-bg);
+    color: var(--danger);
+}
+
+.selection-action-danger .selection-action-label {
+    color: var(--danger);
+}
+
+.selection-action-danger:hover .selection-action-icon {
+    background: var(--selection-action-danger-hover-bg);
+    color: var(--danger-hover);
+}
+
+.selection-action-danger:hover .selection-action-label {
+    color: var(--danger-hover);
+}
+
+.selection-bar-close {
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--selection-close-bg);
+    color: var(--selection-close-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform var(--transition), opacity var(--transition), background-color var(--transition);
+    flex-shrink: 0;
+    margin-left: 2px;
+}
+
+.selection-bar-close svg {
+    width: 16px;
+    height: 16px;
+}
+
+.selection-bar-close:hover {
+    transform: scale(0.98);
+    opacity: 0.92;
 }
 
 @media (max-width: 560px) {
     .selection-bar {
-        flex-direction: column;
-        align-items: stretch;
+        width: 100%;
+        max-width: none;
+        padding: 10px;
+        gap: 8px;
     }
 
-    .selection-bar-actions .btn {
-        flex: 1;
+    .selection-bar-info {
+        gap: 6px;
+    }
+
+    .selection-bar-divider {
+        margin-right: 0;
+    }
+
+    .selection-bar-label-full {
+        display: none;
+    }
+
+    .selection-bar-label-short {
+        display: inline;
+    }
+
+    .selection-action {
+        min-width: 50px;
+    }
+
+    .selection-action-icon,
+    .selection-bar-close {
+        width: 34px;
+        height: 34px;
+    }
+
+    .selection-action-label {
+        font-size: 8px;
+    }
+}
+
+@media (max-width: 420px) {
+    .selection-bar {
+        padding: 9px;
+        gap: 6px;
+    }
+
+    .selection-bar-label {
+        font-size: 12px;
+    }
+
+    .selection-action {
+        min-width: 44px;
     }
 }
 
@@ -1112,7 +1455,7 @@ html, body {
 }
 
 .detail-header-inner {
-    max-width: 800px;
+    max-width: var(--layout-max-width);
     margin: 0 auto;
 }
 
@@ -1293,40 +1636,58 @@ html, body {
             </svg>
             <span data-i18n="filesync">FileSync</span>
         </a>
-        <div class="header-actions">
-            <button class="btn btn-secondary btn-sm" onclick="pasteClipboardItems()" id="btnPaste" title="Paste" disabled>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M8 4h8"/>
-                    <path d="M9 3h6a1 1 0 011 1v2H8V4a1 1 0 011-1z"/>
-                    <path d="M8 6H7a2 2 0 00-2 2v11a2 2 0 002 2h10a2 2 0 002-2V8a2 2 0 00-2-2h-1"/>
-                    <path d="M10 12h6"/>
-                    <path d="M10 16h4"/>
-                </svg>
-                <span data-i18n="paste">Paste</span>
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="toggleSelectionMode()" id="btnSelect" title="Select items">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <polyline points="9 12 11 14 15 10"/>
-                </svg>
-                <span data-i18n="select">Select</span>
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="toggleUploadZone()" id="btnUpload" title="Upload files">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-                <span data-i18n="upload">Upload</span>
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="showNewFolderModal()" id="btnFolder" title="New folder">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                    <line x1="12" y1="11" x2="12" y2="17"/>
-                    <line x1="9" y1="14" x2="15" y2="14"/>
-                </svg>
-                <span data-i18n="folder">Folder</span>
-            </button>
+        <div class="header-controls">
+            <div class="header-actions">
+                <button class="btn btn-secondary btn-sm" onclick="pasteClipboardItems()" id="btnPaste" title="Paste" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 4h8"/>
+                        <path d="M9 3h6a1 1 0 011 1v2H8V4a1 1 0 011-1z"/>
+                        <path d="M8 6H7a2 2 0 00-2 2v11a2 2 0 002 2h10a2 2 0 002-2V8a2 2 0 00-2-2h-1"/>
+                        <path d="M10 12h6"/>
+                        <path d="M10 16h4"/>
+                    </svg>
+                    <span data-i18n="paste">Paste</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="toggleSelectionMode()" id="btnSelect" title="Select items">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <polyline points="9 12 11 14 15 10"/>
+                    </svg>
+                    <span data-i18n="select">Select</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="toggleUploadZone()" id="btnUpload" title="Upload files">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <span data-i18n="upload">Upload</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="showNewFolderModal()" id="btnFolder" title="New folder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                        <line x1="12" y1="11" x2="12" y2="17"/>
+                        <line x1="9" y1="14" x2="15" y2="14"/>
+                    </svg>
+                    <span data-i18n="folder">Folder</span>
+                </button>
+                <button class="btn btn-secondary btn-sm theme-toggle" id="themeToggle" type="button" data-theme-state="light" title="Theme" aria-label="Theme">
+                    <svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79"></path>
+                    </svg>
+                    <svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4"></circle>
+                        <path d="M12 2v2"></path>
+                        <path d="M12 20v2"></path>
+                        <path d="M4.93 4.93l1.41 1.41"></path>
+                        <path d="M17.66 17.66l1.41 1.41"></path>
+                        <path d="M2 12h2"></path>
+                        <path d="M20 12h2"></path>
+                        <path d="M4.93 19.07l1.41-1.41"></path>
+                        <path d="M17.66 6.34l1.41-1.41"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 </header>
@@ -1403,41 +1764,53 @@ html, body {
 
 <!-- Selection Bar -->
 <div class="selection-bar-wrap">
-    <div class="selection-bar" id="selectionBar">
-        <div class="selection-bar-info" id="selectionCount"></div>
+    <div class="selection-bar" id="selectionBar" role="toolbar" aria-label="Selection actions">
+        <div class="selection-bar-info">
+            <div class="selection-bar-count" id="selectionCount">0</div>
+            <div class="selection-bar-label">
+                <span class="selection-bar-label-full" data-i18n="selected_label">Selected</span>
+                <span class="selection-bar-label-short" data-i18n="selected_short_label">Sel.</span>
+            </div>
+        </div>
+        <div class="selection-bar-divider" aria-hidden="true"></div>
         <div class="selection-bar-actions">
-            <button class="btn btn-secondary btn-sm" id="btnSelectionCopy" onclick="copySelectedItems()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="11" height="11" rx="2" ry="2"/>
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-                </svg>
-                <span data-i18n="copy">Copy</span>
+            <button class="selection-action" id="btnSelectionCopy" type="button" onclick="copySelectedItems()">
+                <span class="selection-action-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="11" height="11" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                </span>
+                <span class="selection-action-label" data-i18n="copy">Copy</span>
             </button>
-            <button class="btn btn-secondary btn-sm" id="btnSelectionCut" onclick="cutSelectedItems()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="6" cy="6" r="3"/>
-                    <circle cx="6" cy="18" r="3"/>
-                    <line x1="20" y1="4" x2="8.12" y2="15.88"/>
-                    <line x1="14.47" y1="14.48" x2="20" y2="20"/>
-                    <line x1="8.12" y1="8.12" x2="12" y2="12"/>
-                </svg>
-                <span data-i18n="cut">Cut</span>
+            <button class="selection-action" id="btnSelectionCut" type="button" onclick="cutSelectedItems()">
+                <span class="selection-action-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="6" cy="6" r="3"/>
+                        <circle cx="6" cy="18" r="3"/>
+                        <line x1="20" y1="4" x2="8.12" y2="15.88"/>
+                        <line x1="14.47" y1="14.48" x2="20" y2="20"/>
+                        <line x1="8.12" y1="8.12" x2="12" y2="12"/>
+                    </svg>
+                </span>
+                <span class="selection-action-label" data-i18n="cut">Cut</span>
             </button>
-            <button class="btn btn-danger btn-sm" id="btnSelectionDelete" onclick="deleteSelectedItems()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                </svg>
-                <span data-i18n="delete_label">Delete</span>
-            </button>
-            <button class="btn btn-secondary btn-sm" id="btnSelectionCancel" onclick="cancelSelection()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-                <span data-i18n="cancel">Cancel</span>
+            <button class="selection-action selection-action-danger" id="btnSelectionDelete" type="button" onclick="deleteSelectedItems()">
+                <span class="selection-action-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                </span>
+                <span class="selection-action-label" data-i18n="delete_label">Delete</span>
             </button>
         </div>
+        <button class="selection-bar-close" id="btnSelectionClose" type="button" onclick="cancelSelection()" aria-label="Cancel" title="Cancel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
     </div>
 </div>
 
@@ -1516,6 +1889,7 @@ html, body {
             copy: "Copy",
             cut: "Cut",
             selected_label: "Selected",
+            selected_short_label: "Sel.",
             filter_placeholder: "Filter files...",
             sort_name_asc: "Name A-Z",
             sort_name_desc: "Name Z-A",
@@ -1590,7 +1964,12 @@ html, body {
             hide_hidden_files: "Hide hidden",
             list_view: "List",
             grid_view: "Grid",
-            grid_large_view: "Large grid"
+            grid_large_view: "Large grid",
+            theme_toggle: "Theme",
+            theme_mode_light: "Light",
+            theme_mode_dark: "Dark",
+            theme_switch_to_light: "Switch to light mode",
+            theme_switch_to_dark: "Switch to dark mode"
         },
         es: {
             filesync: "FileSync",
@@ -1603,6 +1982,7 @@ html, body {
             copy: "Copiar",
             cut: "Cortar",
             selected_label: "Seleccionados",
+            selected_short_label: "Sel.",
             filter_placeholder: "Filtrar archivos...",
             sort_name_asc: "Nombre A-Z",
             sort_name_desc: "Nombre Z-A",
@@ -1677,7 +2057,12 @@ html, body {
             hide_hidden_files: "Ocultar ocultos",
             list_view: "Lista",
             grid_view: "Cuadr\u00edcula",
-            grid_large_view: "Cuadr\u00edcula grande"
+            grid_large_view: "Cuadr\u00edcula grande",
+            theme_toggle: "Tema",
+            theme_mode_light: "Claro",
+            theme_mode_dark: "Oscuro",
+            theme_switch_to_light: "Cambiar al modo claro",
+            theme_switch_to_dark: "Cambiar al modo oscuro"
         },
         pt_BR: {
             filesync: "FileSync",
@@ -1690,6 +2075,7 @@ html, body {
             copy: "Copiar",
             cut: "Recortar",
             selected_label: "Selecionados",
+            selected_short_label: "Sel.",
             filter_placeholder: "Filtrar arquivos...",
             sort_name_asc: "Nome A-Z",
             sort_name_desc: "Nome Z-A",
@@ -1764,7 +2150,12 @@ html, body {
             hide_hidden_files: "Ocultar ocultos",
             list_view: "Lista",
             grid_view: "Grade",
-            grid_large_view: "Grade grande"
+            grid_large_view: "Grade grande",
+            theme_toggle: "Tema",
+            theme_mode_light: "Claro",
+            theme_mode_dark: "Escuro",
+            theme_switch_to_light: "Mudar para o modo claro",
+            theme_switch_to_dark: "Mudar para o modo escuro"
         },
         zh: {
             filesync: "FileSync",
@@ -1829,13 +2220,94 @@ html, body {
             hide_hidden_files: "隐藏隐藏项",
             list_view: "列表",
             grid_view: "网格",
-            grid_large_view: "大网格"
+            grid_large_view: "大网格",
+            theme_toggle: "主题",
+            theme_mode_light: "浅色",
+            theme_mode_dark: "深色",
+            theme_switch_to_light: "切换到浅色模式",
+            theme_switch_to_dark: "切换到深色模式",
+            selected_short_label: "选"
         }
     };
     var currentLang = "en";
 
     function t(key) {
         return (translations[currentLang] && translations[currentLang][key]) || translations.en[key] || key;
+    }
+
+    var THEME_STORAGE_KEY = "filesync_theme";
+    var currentThemePreference = "light";
+
+    function normalizeThemePreference(theme) {
+        return theme === "dark" || theme === "light" ? theme : null;
+    }
+
+    function getStoredThemePreference() {
+        try {
+            return normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY));
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setStoredThemePreference(theme) {
+        var normalized = normalizeThemePreference(theme);
+        if (!normalized) return;
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, normalized);
+        } catch (e) {}
+    }
+
+    function getInitialThemePreference() {
+        var storedTheme = getStoredThemePreference();
+        if (storedTheme) {
+            return storedTheme;
+        }
+        var currentTheme = normalizeThemePreference(document.documentElement.getAttribute("data-theme"));
+        if (currentTheme) {
+            return currentTheme;
+        }
+        return "light";
+    }
+
+    function getNextThemePreference(theme) {
+        return theme === "dark" ? "light" : "dark";
+    }
+
+    function updateThemeToggleUI() {
+        var button = document.getElementById("themeToggle");
+        if (!button) return;
+
+        var nextTheme = getNextThemePreference(currentThemePreference);
+        var currentLabelKey = currentThemePreference === "dark" ? "theme_mode_dark" : "theme_mode_light";
+        var nextActionKey = nextTheme === "dark" ? "theme_switch_to_dark" : "theme_switch_to_light";
+        var title = t("theme_toggle") + ": " + t(currentLabelKey) + ". " + t(nextActionKey);
+
+        button.setAttribute("data-theme-state", currentThemePreference);
+        button.title = title;
+        button.setAttribute("aria-label", title);
+    }
+
+    function applyThemePreference(theme) {
+        currentThemePreference = normalizeThemePreference(theme) || "light";
+        document.documentElement.setAttribute("data-theme", currentThemePreference);
+        updateThemeToggleUI();
+    }
+
+    function toggleThemePreference() {
+        var nextTheme = getNextThemePreference(currentThemePreference);
+        applyThemePreference(nextTheme);
+        setStoredThemePreference(nextTheme);
+    }
+
+    function initTheme() {
+        applyThemePreference(getInitialThemePreference());
+
+        var button = document.getElementById("themeToggle");
+        if (button && !button._filesyncThemeBound) {
+            button.addEventListener("click", toggleThemePreference);
+            button._filesyncThemeBound = true;
+        }
     }
 
     function getParentPath(path) {
@@ -1867,7 +2339,8 @@ html, body {
         document.getElementById('btnSelectionCopy').title = t('copy');
         document.getElementById('btnSelectionCut').title = t('cut');
         document.getElementById('btnSelectionDelete').title = t('delete_label');
-        document.getElementById('btnSelectionCancel').title = t('cancel');
+        document.getElementById('btnSelectionClose').title = t('cancel');
+        document.getElementById('btnSelectionClose').setAttribute('aria-label', t('cancel'));
         document.getElementById('btnUploadFilesCta').title = t('upload_files_cta');
         document.getElementById('btnUploadFilesCta').setAttribute('aria-label', t('upload_files_cta'));
         document.getElementById('btnUploadFolderCta').title = t('upload_folder_cta');
@@ -1875,6 +2348,7 @@ html, body {
         // Modal default buttons
         document.getElementById('modalCancelBtn').textContent = t('cancel');
         document.getElementById('confirmCancelBtn').textContent = t('cancel');
+        updateThemeToggleUI();
         updateParentNav();
         updateNavigationContextUI();
         updateViewModeUI();
@@ -2465,7 +2939,7 @@ html, body {
         }
 
         if (selectionCount) {
-            selectionCount.textContent = t('selected_label') + ': ' + selectedPaths.length;
+            selectionCount.textContent = String(selectedPaths.length);
         }
 
         if (selectionBar) {
@@ -3271,6 +3745,7 @@ html, body {
             // Keep English as default
         })
         .then(function() {
+            initTheme();
             applyStaticTranslations();
             return loadFiles();
         })

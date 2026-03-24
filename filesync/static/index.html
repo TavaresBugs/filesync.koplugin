@@ -704,6 +704,7 @@ html, body {
     align-items: start;
     gap: 10px;
     min-height: 132px;
+    height: 132px;
     margin-bottom: 0;
 }
 
@@ -743,6 +744,8 @@ html, body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     line-height: 1.35;
 }
 
@@ -757,7 +760,9 @@ html, body {
     grid-area: actions;
     width: 100%;
     margin-top: 4px;
+    min-height: 32px;
     justify-content: flex-end;
+    align-items: center;
 }
 
 .file-list.view-grid .file-actions .file-chevron {
@@ -772,6 +777,7 @@ html, body {
     justify-content: center;
     gap: 14px;
     min-height: 176px;
+    height: 176px;
     padding: 18px 14px 14px;
     margin-bottom: 0;
     text-align: center;
@@ -821,6 +827,8 @@ html, body {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     text-align: center;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     line-height: 1.35;
 }
 
@@ -846,7 +854,9 @@ html, body {
 .file-list.view-grid-large .file-actions {
     width: 100%;
     margin-top: auto;
+    min-height: 32px;
     justify-content: flex-end;
+    align-items: center;
 }
 
 .file-list.view-grid-large .file-actions .file-chevron {
@@ -1062,6 +1072,13 @@ html, body {
 
 .file-item.selection-mode .file-actions {
     display: none;
+}
+
+.file-list.view-grid .file-item.selection-mode .file-actions,
+.file-list.view-grid-large .file-item.selection-mode .file-actions {
+    display: flex;
+    visibility: hidden;
+    pointer-events: none;
 }
 
 @media (min-width: 920px) {

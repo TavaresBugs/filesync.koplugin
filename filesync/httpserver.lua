@@ -198,7 +198,11 @@ function HttpServer:_route(client, method, path, query, headers, body)
         -- Language endpoint for web UI i18n
         if method == "GET" and path == "/api/lang" then
             local lang = G_reader_settings:readSetting("language") or "en"
-            self:_sendJSON(client, 200, {lang = lang})
+            self:_sendJSON(client, 200, {
+                lang = lang,
+                safe_mode = safe_mode,
+                storage_root = self.root_dir or "/mnt/us",
+            })
             return
         end
 

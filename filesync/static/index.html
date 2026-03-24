@@ -344,12 +344,12 @@ html, body {
     align-items: center;
     gap: 4px;
     flex-wrap: wrap;
-    font-size: 13px;
+    font-size: 14px;
     min-width: 0;
 }
 
 .breadcrumb-item {
-    color: var(--text-secondary);
+    color: var(--text);
     cursor: pointer;
     padding: 2px 6px;
     border-radius: var(--radius-xs);
@@ -357,11 +357,21 @@ html, body {
     white-space: nowrap;
     display: inline-flex;
     align-items: center;
+    gap: 6px;
+    font-weight: 600;
 }
 
 .breadcrumb-item svg {
-    width: 16px;
-    height: 16px;
+    width: 17px;
+    height: 17px;
+}
+
+.breadcrumb-home {
+    font-weight: 700;
+}
+
+.breadcrumb-home-label {
+    line-height: 1;
 }
 
 .breadcrumb-item:hover {
@@ -371,7 +381,7 @@ html, body {
 
 .breadcrumb-item.active {
     color: var(--text);
-    font-weight: 600;
+    font-weight: 800;
     cursor: default;
 }
 
@@ -1096,10 +1106,10 @@ html, body {
         padding: 2px 12px 2px 0;
         background: transparent;
         color: var(--text);
-        opacity: 0.76;
-        font-size: 10px;
-        font-weight: 800;
-        letter-spacing: 0.05em;
+        opacity: 0.98;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.035em;
         text-transform: uppercase;
         cursor: pointer;
         white-space: nowrap;
@@ -2892,6 +2902,7 @@ html, body {
     var currentFilter = '';
     var currentScope = 'storage';
     var defaultScope = 'storage';
+    var storageRootPath = '/mnt/us';
     var availableScopes = [];
     var canShowHidden = false;
     var showHiddenFiles = false;
@@ -3201,6 +3212,18 @@ html, body {
         return scopeId === 'system' ? 'system' : 'storage';
     }
 
+    function normalizeStorageRoot(path) {
+        var normalized = (path || '/mnt/us').toString().replace(/\/+$/, '');
+        if (!normalized) {
+            normalized = '/';
+        }
+        return normalized.charAt(0) === '/' ? normalized : '/' + normalized;
+    }
+
+    function getDefaultStartPath(scopeId) {
+        return normalizeScope(scopeId) === 'system' ? normalizeStorageRoot(storageRootPath) : '/';
+    }
+
     function updateNavigationContextFromResponse(data) {
         availableScopes = Array.isArray(data && data.available_scopes) ? data.available_scopes.slice() : [];
         defaultScope = normalizeScope(data && data.default_scope);
@@ -3353,7 +3376,8 @@ html, body {
             var classes = 'breadcrumb-item' + (isLast ? ' active' : '');
             var attrs = isLast ? '' : ' onclick="navigate(\'' + escapeAttr(crumbs[i].path) + '\', \'' + escapeAttr(currentScope) + '\')"';
             if (displayName === "Home") {
-                html += '<span class="' + classes + '"' + attrs + ' title="' + escapeHtml(t('home')) + '" aria-label="' + escapeHtml(t('home')) + '">' + icons.home + '</span>';
+                html += '<span class="' + classes + ' breadcrumb-home"' + attrs + ' title="' + escapeHtml(t('home')) + '" aria-label="' + escapeHtml(t('home')) + '">' +
+                    icons.home + '<span class="breadcrumb-home-label">' + escapeHtml(t('home')) + '</span></span>';
                 continue;
             }
             html += '<span class="' + classes + '"' + attrs + '>' + escapeHtml(displayName) + '</span>';
@@ -4594,6 +4618,8 @@ html, body {
 
     // ===== Init =====
     // Read hash to determine initial state before loading
+    var initHash = window.location.hash || '';
+    var hasExplicitNavigationHash = !!(initHash && initHash !== '#' && initHash !== '#/');
     var initState = _parseHash();
     currentScope = initState.scope || currentScope;
     if (initState.detail) {
@@ -4628,6 +4654,19 @@ html, body {
                     }
                 }
             }
+            if (data && data.storage_root) {
+                storageRootPath = normalizeStorageRoot(data.storage_root);
+            }
+            if (!hasExplicitNavigationHash && !_initDetailPath) {
+                defaultScope = data && data.safe_mode === false ? 'system' : 'storage';
+                currentScope = defaultScope;
+                currentPath = getDefaultStartPath(currentScope);
+                history.replaceState(
+                    { path: currentPath, scope: currentScope, detail: false },
+                    '',
+                    buildHistoryURL(currentPath, currentScope, false)
+                );
+            }
         })
         .catch(function() {
             // Keep English as default
@@ -4635,6 +4674,8 @@ html, body {
         .then(function() {
             initTheme();
             applyStaticTranslations();
+            updateParentNav();
+            updateNavigationContextUI();
             return loadFiles();
         })
         .then(function() {

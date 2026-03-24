@@ -564,6 +564,35 @@ html, body {
     stroke-linejoin: round;
 }
 
+@media (max-width: 520px) {
+    .toolbar {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .toolbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .search-box {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .nav-context {
+        margin-left: 0;
+        flex-shrink: 0;
+    }
+
+    .sort-select {
+        flex: 0 0 128px;
+        min-width: 128px;
+        margin-left: 0;
+    }
+}
+
 /* ===== Buttons ===== */
 .btn {
     display: inline-flex;
@@ -2865,6 +2894,8 @@ html, body {
             cut: "Cut",
             select_all: "All",
             select_all_title: "Select all",
+            deselect_all: "None",
+            deselect_all_title: "Clear selection",
             selected_label: "Selected",
             selected_short_label: "Sel.",
             filter_placeholder: "Filter files...",
@@ -2977,6 +3008,8 @@ html, body {
             cut: "Cortar",
             select_all: "Todo",
             select_all_title: "Seleccionar todo",
+            deselect_all: "Nada",
+            deselect_all_title: "Limpiar seleccion",
             selected_label: "Seleccionados",
             selected_short_label: "Sel.",
             filter_placeholder: "Filtrar archivos...",
@@ -3089,6 +3122,8 @@ html, body {
             cut: "Recortar",
             select_all: "Tudo",
             select_all_title: "Selecionar tudo",
+            deselect_all: "Nada",
+            deselect_all_title: "Limpar selecao",
             selected_label: "Selecionados",
             selected_short_label: "Sel.",
             filter_placeholder: "Filtrar arquivos...",
@@ -3201,6 +3236,8 @@ html, body {
             cut: "剪切",
             select_all: "全选",
             select_all_title: "全选",
+            deselect_all: "清空",
+            deselect_all_title: "清除选择",
             selected_label: "已选择",
             selected_short_label: "选",
             filter_placeholder: "筛选文件...",
@@ -3405,6 +3442,8 @@ html, body {
         document.getElementById('btnParentNav').setAttribute('aria-label', t('go_up'));
         document.getElementById('btnSelectionSelectAll').title = t('select_all_title');
         document.getElementById('btnSelectionSelectAll').setAttribute('aria-label', t('select_all_title'));
+        var selectAllLabel = document.querySelector('#btnSelectionSelectAll .selection-action-label');
+        if (selectAllLabel) selectAllLabel.textContent = t('select_all');
         document.getElementById('btnSelectionDownload').title = t('download');
         document.getElementById('btnSelectionCopy').title = t('copy');
         document.getElementById('btnSelectionCut').title = t('cut');
@@ -3453,6 +3492,10 @@ html, body {
     var selectionMode = false;
     var selectedPaths = [];
     var clipboardState = { mode: null, items: [] };
+    var longPressState = null;
+    var suppressNextSelectionClick = null;
+    var LONG_PRESS_DURATION = 500;
+    var LONG_PRESS_MOVE_TOLERANCE = 12;
     try {
         var storedViewMode = localStorage.getItem('filesync_view_mode');
         if (storedViewMode === 'grid' || storedViewMode === 'grid-large') {
@@ -3893,6 +3936,7 @@ html, body {
     function _navigateInternal(path, scope) {
         var nextScope = normalizeScope(scope || currentScope || defaultScope);
         path = path || '/';
+        cancelPendingLongPress();
         if (currentPath !== path || currentScope !== nextScope) {
             selectionMode = false;
             selectedPaths = [];
@@ -4025,7 +4069,14 @@ html, body {
             if (selectionMode) itemClass += ' selection-mode';
             if (isSelected) itemClass += ' selected';
 
-            html += '<div class="' + itemClass + '" onclick="onFileClick(event, ' + (entry.is_dir ? 'true' : 'false') + ', \'' + escapeAttr(entry.path) + '\')">';
+            html += '<div class="' + itemClass + '"' +
+                ' onclick="onFileClick(event, ' + (entry.is_dir ? 'true' : 'false') + ', \'' + escapeAttr(entry.path) + '\')"' +
+                ' onpointerdown="handleFilePointerDown(event, \'' + escapeAttr(entry.path) + '\')"' +
+                ' onpointermove="handleFilePointerMove(event)"' +
+                ' onpointerup="handleFilePointerEnd(event)"' +
+                ' onpointercancel="handleFilePointerCancel(event)"' +
+                ' onpointerleave="handleFilePointerCancel(event)"' +
+                ' oncontextmenu="handleFileContextMenu(event, \'' + escapeAttr(entry.path) + '\')">';
             html += '<div class="file-select-marker">' + icons.check + '</div>';
             html += '<div class="file-main">';
             html += '<div class="file-icon ' + typeClass + '">' + icon + '</div>';
@@ -4060,6 +4111,10 @@ html, body {
     }
 
     window.onFileClick = function(event, isDir, path) {
+        if (shouldSuppressSelectionClick(path)) {
+            event.preventDefault();
+            return;
+        }
         if (selectionMode) {
             event.preventDefault();
             togglePathSelection(path);
@@ -4254,6 +4309,101 @@ html, body {
         return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || !!target.isContentEditable;
     }
 
+    function isFileActionTarget(target) {
+        return !!(target && target.closest && target.closest('.file-actions'));
+    }
+
+    function clearSuppressedSelectionClick() {
+        suppressNextSelectionClick = null;
+    }
+
+    function shouldSuppressSelectionClick(path) {
+        if (!suppressNextSelectionClick) return false;
+        if (suppressNextSelectionClick.path !== path) return false;
+        if (Date.now() > suppressNextSelectionClick.expiresAt) {
+            clearSuppressedSelectionClick();
+            return false;
+        }
+        clearSuppressedSelectionClick();
+        return true;
+    }
+
+    function cancelPendingLongPress() {
+        if (!longPressState) return;
+        clearTimeout(longPressState.timer);
+        longPressState = null;
+    }
+
+    function enterSelectionModeFromLongPress(path) {
+        cancelPendingLongPress();
+        clearSuppressedSelectionClick();
+        suppressNextSelectionClick = {
+            path: path,
+            expiresAt: Date.now() + 350
+        };
+        selectionMode = true;
+        selectedPaths = [path];
+        closeUploadZone();
+        updateSelectionUI();
+        renderFiles(currentEntries);
+        if (navigator.vibrate) {
+            navigator.vibrate(12);
+        }
+    }
+
+    function matchesLongPressPointer(event) {
+        return !!(longPressState && event && event.pointerId === longPressState.pointerId);
+    }
+
+    window.handleFilePointerDown = function(event, path) {
+        if (selectionMode || !event) return;
+        if (event.pointerType === 'mouse') return;
+        if (event.button !== undefined && event.button !== 0) return;
+        if (isFileActionTarget(event.target)) return;
+
+        cancelPendingLongPress();
+        longPressState = {
+            pointerId: event.pointerId,
+            path: path,
+            startX: event.clientX,
+            startY: event.clientY,
+            timer: setTimeout(function() {
+                enterSelectionModeFromLongPress(path);
+            }, LONG_PRESS_DURATION)
+        };
+    };
+
+    window.handleFilePointerMove = function(event) {
+        if (!matchesLongPressPointer(event)) return;
+
+        var dx = Math.abs(event.clientX - longPressState.startX);
+        var dy = Math.abs(event.clientY - longPressState.startY);
+        if (dx > LONG_PRESS_MOVE_TOLERANCE || dy > LONG_PRESS_MOVE_TOLERANCE) {
+            cancelPendingLongPress();
+        }
+    };
+
+    window.handleFilePointerEnd = function(event) {
+        if (!matchesLongPressPointer(event)) return;
+        cancelPendingLongPress();
+    };
+
+    window.handleFilePointerCancel = function(event) {
+        if (!longPressState) return;
+        if (event && event.pointerId !== undefined && event.pointerId !== longPressState.pointerId) return;
+        cancelPendingLongPress();
+    };
+
+    window.handleFileContextMenu = function(event, path) {
+        if (shouldSuppressSelectionClick(path)) {
+            event.preventDefault();
+            suppressNextSelectionClick = {
+                path: path,
+                expiresAt: Date.now() + 200
+            };
+        }
+    };
+
     function hasClipboardItems() {
         return !!(clipboardState.mode && clipboardState.items && clipboardState.items.length);
     }
@@ -4340,6 +4490,9 @@ html, body {
         var hasSelection = selectedPaths.length > 0;
         var showBar = selectionMode;
         var allVisibleSelected = areAllVisibleItemsSelected();
+        var selectAllLabel = document.querySelector('#btnSelectionSelectAll .selection-action-label');
+        var selectAllTitle = allVisibleSelected ? t('deselect_all_title') : t('select_all_title');
+        var selectAllText = allVisibleSelected ? t('deselect_all') : t('select_all');
 
         if (selectBtn) {
             selectBtn.classList.toggle('active', selectionMode);
@@ -4354,7 +4507,14 @@ html, body {
             selectionBar.classList.toggle('visible', showBar);
         }
 
-        if (selectAllBtn) selectAllBtn.disabled = !currentEntries.length || allVisibleSelected;
+        if (selectAllBtn) {
+            selectAllBtn.disabled = !currentEntries.length;
+            selectAllBtn.title = selectAllTitle;
+            selectAllBtn.setAttribute('aria-label', selectAllTitle);
+        }
+        if (selectAllLabel) {
+            selectAllLabel.textContent = selectAllText;
+        }
         if (downloadBtn) downloadBtn.disabled = !hasSelection;
         if (copyBtn) copyBtn.disabled = !hasSelection;
         if (cutBtn) cutBtn.disabled = !hasSelection;
@@ -4373,6 +4533,7 @@ html, body {
     }
 
     window.toggleSelectionMode = function() {
+        cancelPendingLongPress();
         selectionMode = !selectionMode;
         if (selectionMode) {
             closeUploadZone();
@@ -4390,15 +4551,28 @@ html, body {
             selectionMode = true;
         }
 
-        var selectedLookup = {};
-        for (var i = 0; i < selectedPaths.length; i++) {
-            selectedLookup[selectedPaths[i]] = true;
+        var visiblePaths = getSelectablePaths();
+        if (areAllVisibleItemsSelected()) {
+            var visibleLookup = {};
+            for (var i = 0; i < visiblePaths.length; i++) {
+                visibleLookup[visiblePaths[i]] = true;
+            }
+            selectedPaths = selectedPaths.filter(function(path) {
+                return !visibleLookup[path];
+            });
+            updateSelectionUI();
+            renderFiles(currentEntries);
+            return;
         }
 
-        var visiblePaths = getSelectablePaths();
-        for (var j = 0; j < visiblePaths.length; j++) {
-            if (!selectedLookup[visiblePaths[j]]) {
-                selectedPaths.push(visiblePaths[j]);
+        var selectedLookup = {};
+        for (var j = 0; j < selectedPaths.length; j++) {
+            selectedLookup[selectedPaths[j]] = true;
+        }
+
+        for (var k = 0; k < visiblePaths.length; k++) {
+            if (!selectedLookup[visiblePaths[k]]) {
+                selectedPaths.push(visiblePaths[k]);
             }
         }
 
@@ -4407,6 +4581,7 @@ html, body {
     };
 
     window.cancelSelection = function() {
+        cancelPendingLongPress();
         selectionMode = false;
         selectedPaths = [];
         updateSelectionUI();

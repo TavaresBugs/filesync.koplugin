@@ -40,6 +40,8 @@
     --primary: #3b82f6;
     --primary-hover: #2563eb;
     --primary-light: #eff6ff;
+    --on-primary: #ffffff;
+    --on-primary-muted: rgba(255, 255, 255, 0.16);
     --danger: #ef4444;
     --danger-hover: #dc2626;
     --danger-light: #fef2f2;
@@ -59,6 +61,10 @@
     --selection-action-danger-hover-bg: #ffe4e6;
     --selection-close-bg: #1f2937;
     --selection-close-color: #fff;
+    --upload-cta-bg: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    --upload-cta-hover: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    --upload-cta-border: rgba(37, 99, 235, 0.18);
+    --upload-cta-text: #ffffff;
     --layout-max-width: 920px;
     --file-table-columns: 44px minmax(0, 1fr) 90px 110px 80px 96px;
     --file-table-columns-selection: 24px 44px minmax(0, 1fr) 90px 110px 80px 96px;
@@ -116,6 +122,8 @@
     --primary: #3b82f6;
     --primary-hover: #2563eb;
     --primary-light: #22324d;
+    --on-primary: #ffffff;
+    --on-primary-muted: rgba(255, 255, 255, 0.12);
     --danger: #ca666a;
     --danger-hover: #d9767a;
     --danger-light: #59252b;
@@ -135,6 +143,10 @@
     --selection-action-danger-hover-bg: rgba(118, 48, 57, 0.98);
     --selection-close-bg: #0f172a;
     --selection-close-color: #f8fafc;
+    --upload-cta-bg: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+    --upload-cta-hover: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    --upload-cta-border: rgba(96, 165, 250, 0.24);
+    --upload-cta-text: #ffffff;
     --file-table-columns: 44px minmax(0, 1fr) 90px 110px 80px 96px;
     --file-table-columns-selection: 24px 44px minmax(0, 1fr) 90px 110px 80px 96px;
     --file-icon-dir-bg: #6a4525;
@@ -1289,7 +1301,7 @@ html, body {
 .dropzone {
     max-width: var(--layout-max-width);
     margin: 0 auto;
-    padding: 0 16px;
+    padding: 0 8px;
 }
 
 .dropzone-area {
@@ -1298,7 +1310,7 @@ html, body {
     padding: 32px 20px;
     text-align: center;
     transition: all var(--transition);
-    background: var(--surface);
+    background: var(--surface-raised);
     margin-bottom: 12px;
     display: none;
 }
@@ -1324,48 +1336,49 @@ html, body {
 }
 
 .dropzone-text {
-    margin-bottom: 14px;
-}
-
-.dropzone-text-primary {
+    max-width: 360px;
+    margin: 0 auto 16px;
     font-size: 14px;
     color: var(--text-secondary);
+    line-height: 1.5;
 }
 
-.dropzone-text-secondary {
-    font-size: 13px;
-    color: var(--text-tertiary);
-    margin-top: 4px;
+.dropzone-text strong {
+    color: var(--primary);
+    cursor: pointer;
+    font-weight: 700;
 }
 
 .dropzone-actions {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    width: min(100%, 480px);
+    margin: 0 auto;
 }
 
 .dropzone-cta {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 8px 16px 8px 10px;
-    border: none;
-    border-radius: 999px;
-    background: var(--primary);
-    color: #fff;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    min-height: 54px;
+    padding: 10px 16px 10px 14px;
+    border: 1px solid var(--upload-cta-border);
+    border-radius: 14px;
+    background: var(--upload-cta-bg);
+    color: var(--upload-cta-text);
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
     line-height: 1;
     box-shadow: var(--shadow);
     cursor: pointer;
-    transition: transform var(--transition), background var(--transition), box-shadow var(--transition);
+    transition: transform var(--transition), background var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 
 .dropzone-cta:hover {
-    background: var(--primary-hover);
+    background: var(--upload-cta-hover);
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
 }
@@ -1387,10 +1400,9 @@ html, body {
 }
 
 .dropzone-cta-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.16);
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1398,30 +1410,69 @@ html, body {
 }
 
 .dropzone-cta-icon svg {
-    width: 16px;
-    height: 16px;
+    width: 17px;
+    height: 17px;
     stroke: currentColor;
-}
-
-.dropzone-cta.secondary .dropzone-cta-icon {
-    background: rgba(59, 130, 246, 0.08);
-    color: var(--primary);
 }
 
 .dropzone-cta-label {
     display: block;
     transform: translateY(-0.5px);
     white-space: nowrap;
+    text-align: left;
+}
+
+.dropzone-cta-file {
+    color: var(--upload-cta-text);
+}
+
+.dropzone-cta-file:hover {
+    color: var(--upload-cta-text);
+}
+
+.dropzone-cta-file .dropzone-cta-icon {
+    background: var(--on-primary-muted);
+    color: var(--upload-cta-text);
+}
+
+.dropzone-cta-secondary {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.dropzone-cta-secondary:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+    box-shadow: var(--shadow-md);
+}
+
+.dropzone-cta-folder {
+    color: var(--text);
+}
+
+.dropzone-cta-folder:hover {
+    color: var(--text);
+}
+
+.dropzone-cta-folder .dropzone-cta-icon {
+    background: var(--file-icon-dir-bg);
+    color: var(--file-icon-dir-text);
+}
+
+.dropzone-cta-folder .dropzone-cta-icon svg {
+    width: 18px;
+    height: 18px;
+    transform: none;
 }
 
 @media (max-width: 520px) {
     .dropzone-actions {
-        flex-direction: column;
-        align-items: stretch;
+        grid-template-columns: 1fr;
     }
 
     .dropzone-cta {
-        width: 100%;
+        justify-content: center;
     }
 }
 
@@ -1433,8 +1484,8 @@ html, body {
 }
 
 .upload-item {
-    background: var(--surface);
-    border: 1px solid var(--border-light);
+    background: var(--surface-raised);
+    border: 1px solid var(--card-border);
     border-radius: var(--radius-sm);
     padding: 10px 12px;
     margin-bottom: 6px;
@@ -1443,8 +1494,102 @@ html, body {
     gap: 10px;
 }
 
+.upload-item-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.upload-item-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.upload-item-icon svg {
+    width: 17px;
+    height: 17px;
+}
+
+.upload-item-icon.dir {
+    background: var(--file-icon-dir-bg);
+    color: var(--file-icon-dir-text);
+}
+
+.upload-item-icon.ebook {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.upload-item-icon.pdf {
+    background: var(--file-icon-pdf-bg);
+    color: var(--file-icon-pdf-text);
+}
+
+.upload-item-icon.reader {
+    background: var(--file-icon-reader-bg);
+    color: var(--file-icon-reader-text);
+}
+
+.upload-item-icon.comic {
+    background: var(--file-icon-comic-bg);
+    color: var(--file-icon-comic-text);
+}
+
+.upload-item-icon.document {
+    background: var(--file-icon-document-bg);
+    color: var(--file-icon-document-text);
+}
+
+.upload-item-icon.text {
+    background: var(--file-icon-text-bg);
+    color: var(--file-icon-text-text);
+}
+
+.upload-item-icon.markdown {
+    background: var(--file-icon-markdown-bg);
+    color: var(--file-icon-markdown-text);
+}
+
+.upload-item-icon.image {
+    background: var(--file-icon-image-bg);
+    color: var(--file-icon-image-text);
+}
+
+.upload-item-icon.archive {
+    background: var(--file-icon-archive-bg);
+    color: var(--file-icon-archive-text);
+}
+
+.upload-item-icon.audio {
+    background: var(--file-icon-audio-bg);
+    color: var(--file-icon-audio-text);
+}
+
+.upload-item-icon.video {
+    background: var(--file-icon-video-bg);
+    color: var(--file-icon-video-text);
+}
+
+.upload-item-icon.code {
+    background: var(--file-icon-code-bg);
+    color: var(--file-icon-code-text);
+}
+
+.upload-item-icon.file {
+    background: var(--file-icon-file-bg);
+    color: var(--file-icon-file-text);
+}
+
 .upload-item-name {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
@@ -1801,6 +1946,14 @@ html, body {
     margin-bottom: 16px;
 }
 
+.modal-subtitle {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    white-space: pre-line;
+}
+
 .modal-input {
     width: 100%;
     padding: 10px 14px;
@@ -1839,9 +1992,26 @@ html, body {
     min-width: 132px;
 }
 
-#modalOverlay .modal {
+.conflict-modal-title-row {
+    display: block;
+}
+
+.conflict-modal-title-row .modal-title {
+    margin-bottom: 16px;
+    padding-right: 32px;
+}
+
+.conflict-message {
+    white-space: pre-line;
+}
+
+#modalOverlay .modal,
+#conflictOverlay .modal {
     position: relative;
     overflow: visible;
+}
+
+#modalOverlay .modal {
     padding-top: 24px;
 }
 
@@ -1889,32 +2059,6 @@ html, body {
     box-shadow: 0 0 0 3px var(--focus-ring), var(--shadow-md);
 }
 
-.modal-subtitle {
-    margin: 0 0 16px;
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-    white-space: pre-line;
-}
-
-.conflict-modal-title-row {
-    display: block;
-}
-
-.conflict-modal-title-row .modal-title {
-    margin-bottom: 16px;
-    padding-right: 32px;
-}
-
-.conflict-message {
-    white-space: pre-line;
-}
-
-#conflictOverlay .modal {
-    position: relative;
-    overflow: visible;
-}
-
 .conflict-close {
     position: absolute;
     top: -12px;
@@ -1960,6 +2104,44 @@ html, body {
     cursor: pointer;
 }
 
+.conflict-apply input {
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    margin: 0;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-raised);
+    display: inline-grid;
+    place-content: center;
+    cursor: pointer;
+}
+
+.conflict-apply input::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 9px;
+    height: 5px;
+    border-left: 2px solid var(--on-primary);
+    border-bottom: 2px solid var(--on-primary);
+    transform: translate(-50%, -58%) rotate(-45deg) scale(0);
+    transform-origin: center;
+    transition: transform var(--transition);
+}
+
+.conflict-apply input:checked {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.conflict-apply input:checked::after {
+    transform: translate(-50%, -58%) rotate(-45deg) scale(1);
+}
+
 .conflict-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1978,8 +2160,10 @@ html, body {
 }
 
 .btn-skip:hover {
-    background: rgba(59, 130, 246, 0.12);
+    background: rgba(59, 130, 246, 0.16);
+    color: var(--primary);
 }
+
 /* ===== Toast Notifications ===== */
 .toast-container {
     position: fixed;
@@ -2398,34 +2582,37 @@ html, body {
 <!-- Upload Drop Zone -->
 <div class="dropzone" id="dropzoneContainer">
     <div class="dropzone-area" id="dropzone">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         <div class="dropzone-text" id="dropzoneText">
-            <div class="dropzone-text-primary" id="dropzoneTextPrimary" data-i18n="dropzone_text_primary">Drag and drop files or folders here</div>
-            <div class="dropzone-text-secondary" id="dropzoneTextSecondary" data-i18n="dropzone_text_secondary">or choose an option below</div>
+            Drag and drop files or folders here, or <strong onclick="document.getElementById('fileInput').click()">browse files</strong>
         </div>
         <input type="file" id="fileInput" multiple style="display:none" onchange="handleFileSelect(this.files)">
         <input type="file" id="folderInput" webkitdirectory directory mozdirectory multiple style="display:none" onchange="handleFolderSelect(this.files)">
-        <div class="dropzone-actions">
-            <button class="dropzone-cta" id="btnUploadFilesCta" onclick="document.getElementById('fileInput').click()">
+        <div class="dropzone-actions" id="dropzoneActions" role="group" aria-label="Upload actions">
+            <button class="dropzone-cta dropzone-cta-file" id="btnUploadFilesCta" type="button" onclick="document.getElementById('fileInput').click()">
                 <span class="dropzone-cta-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
+                        <path d="M12 18v-6"/>
+                        <path d="M9.5 14.5L12 12l2.5 2.5"/>
                     </svg>
                 </span>
-                <span class="dropzone-cta-label" data-i18n="upload_files_cta">Upload files</span>
+                <span class="dropzone-cta-label" data-i18n="choose_files">Choose Files</span>
             </button>
-            <button class="dropzone-cta secondary" id="btnUploadFolderCta" onclick="document.getElementById('folderInput').click()">
+            <button class="dropzone-cta dropzone-cta-secondary dropzone-cta-folder" id="btnUploadFolderCta" type="button" onclick="document.getElementById('folderInput').click()">
                 <span class="dropzone-cta-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        <path d="M12 10v6"/>
+                        <path d="M9 13h6"/>
                     </svg>
                 </span>
-                <span class="dropzone-cta-label" data-i18n="upload_folder_cta">Upload folder</span>
+                <span class="dropzone-cta-label" data-i18n="choose_folder">Choose Folder</span>
             </button>
         </div>
     </div>
@@ -2622,10 +2809,11 @@ html, body {
             sort_largest: "Largest first",
             sort_smallest: "Smallest first",
             sort_type: "Type",
-            dropzone_text_primary: "Drag and drop files or folders here",
-            dropzone_text_secondary: "or choose an option below",
-            upload_files_cta: "Upload files",
-            upload_folder_cta: "Upload folder",
+            dropzone_text: "Drag and drop files or folders here, or",
+            dropzone_browse: "browse files",
+            upload_zone_title: "Drop your files",
+            choose_files: "Choose Files",
+            choose_folder: "Choose Folder",
             loading: "Loading...",
             failed_to_load: "Failed to load files",
             empty_folder: "This folder is empty",
@@ -2647,6 +2835,7 @@ html, body {
             deleted_successfully: "Deleted successfully",
             folder_created: "Folder created",
             uploaded: "uploaded",
+            cancelled: "Cancelled",
             rename_failed: "Rename failed:",
             delete_failed: "Delete failed:",
             upload_failed: "Upload failed:",
@@ -2691,6 +2880,7 @@ html, body {
             paste_placeholder: "Paste will be implemented next",
             clipboard_copy_ready: "{count} items copied",
             clipboard_cut_ready: "{count} items cut",
+            root_required_upload: "This file type requires Root mode to upload. Activate Root mode to continue.",
             invalid_server_response: "Invalid server response",
             server_error: "Server error",
             request_failed: "Request failed",
@@ -2728,10 +2918,11 @@ html, body {
             sort_largest: "M\u00e1s grandes",
             sort_smallest: "M\u00e1s peque\u00f1os",
             sort_type: "Tipo",
-            dropzone_text_primary: "Arrastra archivos o carpetas aqu\u00ed",
-            dropzone_text_secondary: "o elige una opci\u00f3n abajo",
-            upload_files_cta: "Subir archivos",
-            upload_folder_cta: "Subir carpeta",
+            dropzone_text: "Arrastra archivos o carpetas aqu\u00ed, o",
+            dropzone_browse: "busca archivos",
+            upload_zone_title: "Suelta tus archivos",
+            choose_files: "Elegir archivos",
+            choose_folder: "Elegir carpeta",
             loading: "Cargando...",
             failed_to_load: "Error al cargar archivos",
             empty_folder: "Esta carpeta est\u00e1 vac\u00eda",
@@ -2753,6 +2944,7 @@ html, body {
             deleted_successfully: "Eliminado exitosamente",
             folder_created: "Carpeta creada",
             uploaded: "subido",
+            cancelled: "Cancelado",
             rename_failed: "Error al renombrar:",
             delete_failed: "Error al eliminar:",
             upload_failed: "Error al subir:",
@@ -2797,6 +2989,7 @@ html, body {
             paste_placeholder: "Pegar se implementar\u00e1 despu\u00e9s",
             clipboard_copy_ready: "{count} elementos copiados",
             clipboard_cut_ready: "{count} elementos cortados",
+            root_required_upload: "Este tipo de archivo requiere el modo Root para subirse. Activa Root para continuar.",
             invalid_server_response: "Respuesta inv\u00e1lida del servidor",
             server_error: "Error del servidor",
             request_failed: "Solicitud fallida",
@@ -2834,10 +3027,11 @@ html, body {
             sort_largest: "Maiores primeiro",
             sort_smallest: "Menores primeiro",
             sort_type: "Tipo",
-            dropzone_text_primary: "Arraste e solte arquivos ou pastas aqui",
-            dropzone_text_secondary: "ou escolha uma op\u00e7\u00e3o abaixo",
-            upload_files_cta: "Enviar arquivos",
-            upload_folder_cta: "Enviar pasta",
+            dropzone_text: "Arraste e solte arquivos ou pastas aqui ou",
+            dropzone_browse: "procure arquivos",
+            upload_zone_title: "Arraste seus arquivos",
+            choose_files: "Escolher arquivos",
+            choose_folder: "Escolher pasta",
             loading: "Carregando...",
             failed_to_load: "Falha ao carregar arquivos",
             empty_folder: "Esta pasta est\u00e1 vazia",
@@ -2859,6 +3053,7 @@ html, body {
             deleted_successfully: "Exclu\u00eddo com sucesso",
             folder_created: "Pasta criada",
             uploaded: "enviado",
+            cancelled: "Cancelado",
             rename_failed: "Erro ao renomear:",
             delete_failed: "Erro ao excluir:",
             upload_failed: "Erro ao enviar:",
@@ -2903,6 +3098,7 @@ html, body {
             paste_placeholder: "Colar ser\u00e1 implementado em seguida",
             clipboard_copy_ready: "{count} itens copiados",
             clipboard_cut_ready: "{count} itens recortados",
+            root_required_upload: "Esse tipo de arquivo exige o modo Root para upload. Ative o Root para continuar.",
             invalid_server_response: "Resposta inv\u00e1lida do servidor",
             server_error: "Erro do servidor",
             request_failed: "Falha na requisi\u00e7\u00e3o",
@@ -2923,7 +3119,15 @@ html, body {
         zh: {
             filesync: "FileSync",
             upload: "上传",
+            paste: "粘贴",
+            select: "选择",
             folder: "文件夹",
+            go_up: "返回上级",
+            move: "移动",
+            copy: "复制",
+            cut: "剪切",
+            selected_label: "已选择",
+            selected_short_label: "选",
             filter_placeholder: "筛选文件...",
             sort_name_asc: "名称 A-Z",
             sort_name_desc: "名称 Z-A",
@@ -2932,9 +3136,11 @@ html, body {
             sort_largest: "最大优先",
             sort_smallest: "最小优先",
             sort_type: "类型",
-            dropzone_text: "拖放文件到此处，或",
-            dropzone_browse: "浏览",
+            dropzone_text: "拖放文件或文件夹到此处，或",
+            dropzone_browse: "浏览文件",
+            upload_zone_title: "拖放你的文件",
             choose_files: "选择文件",
+            choose_folder: "选择文件夹",
             loading: "加载中...",
             failed_to_load: "加载文件失败",
             empty_folder: "此文件夹为空",
@@ -2956,6 +3162,7 @@ html, body {
             deleted_successfully: "删除成功",
             folder_created: "文件夹已创建",
             uploaded: "已上传",
+            cancelled: "已取消",
             rename_failed: "重命名失败：",
             delete_failed: "删除失败：",
             upload_failed: "上传失败：",
@@ -2987,7 +3194,7 @@ html, body {
             conflict_folder_title: "文件夹已存在",
             conflict_file_message: "文件“{name}”已存在于此位置。",
             conflict_folder_message: "文件夹“{name}”已存在于此位置。",
-            conflict_replace_hint: "选择替换现有项目、跳过或取消操作。",
+            conflict_replace_hint: "选择替换现有项目、跳过此项目或取消操作。",
             conflict_merge_hint: "选择与现有文件夹合并、替换、跳过或取消操作。",
             conflict_apply_all: "将此选择应用到所有剩余冲突",
             storage_scope: "存储",
@@ -2997,12 +3204,20 @@ html, body {
             list_view: "列表",
             grid_view: "网格",
             grid_large_view: "大网格",
+            paste_success: "已粘贴 {count} 项",
+            paste_failed: "粘贴失败：",
+            clipboard_copy_ready: "已复制 {count} 项",
+            clipboard_cut_ready: "已剪切 {count} 项",
+            root_required_upload: "这种文件类型需要 Root 模式才能上传。请先启用 Root 模式。",
+            invalid_server_response: "无效的服务器响应",
+            server_error: "服务器错误",
+            request_failed: "请求失败",
+            book_cover: "图书封面",
             theme_toggle: "主题",
             theme_mode_light: "浅色",
             theme_mode_dark: "深色",
             theme_switch_to_light: "切换到浅色模式",
-            theme_switch_to_dark: "切换到深色模式",
-            selected_short_label: "选"
+            theme_switch_to_dark: "切换到深色模式"
         }
     };
     var currentLang = "en";
@@ -3118,10 +3333,14 @@ html, body {
         document.getElementById('btnSelectionDelete').title = t('delete_label');
         document.getElementById('btnSelectionClose').title = t('cancel');
         document.getElementById('btnSelectionClose').setAttribute('aria-label', t('cancel'));
-        document.getElementById('btnUploadFilesCta').title = t('upload_files_cta');
-        document.getElementById('btnUploadFilesCta').setAttribute('aria-label', t('upload_files_cta'));
-        document.getElementById('btnUploadFolderCta').title = t('upload_folder_cta');
-        document.getElementById('btnUploadFolderCta').setAttribute('aria-label', t('upload_folder_cta'));
+        document.getElementById('btnUploadFilesCta').title = t('choose_files');
+        document.getElementById('btnUploadFilesCta').setAttribute('aria-label', t('choose_files'));
+        document.getElementById('btnUploadFolderCta').title = t('choose_folder');
+        document.getElementById('btnUploadFolderCta').setAttribute('aria-label', t('choose_folder'));
+        document.getElementById('dropzoneActions').setAttribute('aria-label', t('upload_zone_title'));
+        document.getElementById('conflictCloseBtn').title = t('cancel');
+        document.getElementById('conflictCloseBtn').setAttribute('aria-label', t('cancel'));
+        document.getElementById('dropzoneText').innerHTML = t('dropzone_text') + ' <strong onclick="document.getElementById(\'fileInput\').click()">' + t('dropzone_browse') + '</strong>';
         // Modal default buttons
         document.getElementById('modalCloseBtn').title = t('cancel');
         document.getElementById('modalCloseBtn').setAttribute('aria-label', t('cancel'));
@@ -3149,6 +3368,7 @@ html, body {
     var uploadZoneVisible = false;
     var modalCallback = null;
     var confirmCallback = null;
+    var conflictResolver = null;
     var filterTimer = null;
     var currentEntries = [];
     var currentDetailEntry = null;
@@ -4385,13 +4605,25 @@ html, body {
         document.getElementById('dropzone').classList.toggle('visible', uploadZoneVisible);
     };
 
-    function createUploadProgressItem(displayName) {
+    function getUploadProgressTypeClass(file, relativePath, isDirectory) {
+        if (isDirectory) return 'dir';
+        var sourceName = relativePath || (file && file.name) || '';
+        var leafName = sourceName.split('/').pop() || sourceName;
+        return getTypeClassFromFilename(leafName) || 'file';
+    }
+
+    function createUploadProgressItem(displayName, typeClass) {
         var container = document.getElementById('uploadProgress');
         var id = 'upload-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
         var item = document.createElement('div');
+        var resolvedTypeClass = typeClass || 'file';
+        var icon = icons[resolvedTypeClass] || icons.file;
         item.className = 'upload-item';
         item.id = id;
-        item.innerHTML = '<span class="upload-item-name">' + escapeHtml(displayName) + '</span>' +
+        item.innerHTML = '<div class="upload-item-main">' +
+            '<span class="upload-item-icon ' + resolvedTypeClass + '" aria-hidden="true">' + icon + '</span>' +
+            '<span class="upload-item-name">' + escapeHtml(displayName) + '</span>' +
+            '</div>' +
             '<div class="progress-bar"><div class="progress-bar-fill" id="' + id + '-bar"></div></div>' +
             '<span class="upload-item-status" id="' + id + '-status">0%</span>';
         container.prepend(item);
@@ -4432,10 +4664,22 @@ html, body {
     }
 
     function getFolderUploadLabel(files) {
-        var first = files && files[0];
-        if (!first) return t('folder_label');
-        var relativePath = first.webkitRelativePath || '';
-        return relativePath.split('/')[0] || t('folder_label');
+        var roots = [];
+        var seen = Object.create(null);
+        for (var i = 0; i < files.length; i++) {
+            var relativePath = files[i].webkitRelativePath || files[i].name || '';
+            var rootName = relativePath.split('/')[0];
+            if (rootName && !seen[rootName]) {
+                seen[rootName] = true;
+                roots.push(rootName);
+            }
+        }
+
+        if (roots.length === 1) {
+            return roots[0];
+        }
+
+        return t('folder_label') + ' (' + roots.length + ')';
     }
 
     async function processSelectedUploads(files, preserveRelativePath) {
@@ -4450,7 +4694,7 @@ html, body {
 
         if (preserveRelativePath) {
             batchLabel = getFolderUploadLabel(files);
-            batchId = createUploadProgressItem(batchLabel);
+            batchId = createUploadProgressItem(batchLabel, 'dir');
             batchState = {
                 totalBytes: 0,
                 completedBytes: 0,
@@ -4578,7 +4822,7 @@ html, body {
         var displayName = uploadEntry.displayName || uploadEntry.relativePath || file.name;
         var batchState = options.batchState || null;
         var ownsProgressItem = !options.progressId;
-        var id = options.progressId || createUploadProgressItem(displayName);
+        var id = options.progressId || createUploadProgressItem(displayName, getUploadProgressTypeClass(file, uploadEntry.relativePath, false));
 
         try {
             var conflictStrategy = normalizeConflictAction(conflictState && conflictState.action, null);
@@ -4728,11 +4972,6 @@ html, body {
         renderFiles(currentEntries);
     };
 
-
-    window.closeBasicModalButton = function(event) {
-        if (event) event.stopPropagation();
-        hideModal();
-    };
     window.onSortChange = function() {
         var val = document.getElementById('sortSelect').value;
         var parts = val.split('-');
@@ -4781,6 +5020,11 @@ html, body {
         document.getElementById('modalOverlay').classList.remove('open');
         modalCallback = null;
         restoreModalInput();
+    };
+
+    window.closeBasicModalButton = function(event) {
+        if (event) event.stopPropagation();
+        hideModal();
     };
 
     window.closeModal = function(e) {

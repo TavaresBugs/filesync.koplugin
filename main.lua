@@ -83,7 +83,7 @@ function FileSync:onSuspend()
     local FileSyncManager = require("filesync/filesyncmanager")
     if FileSyncManager:isRunning() then
         FileSyncManager._was_running_before_suspend = true
-        FileSyncManager:stop(true) -- silent stop
+        FileSyncManager:stop(true, false, true) -- silent stop, preserve restart intent
     end
 end
 

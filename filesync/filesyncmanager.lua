@@ -32,12 +32,18 @@ local FileSyncManager = {
     _server = nil,
     _port = nil,
     _ip = nil,
+    _restart_desired = false,
+    _wifi_monitor_active = false,
+    _wifi_monitor_generation = 0,
+    _wifi_monitor_last_online = nil,
+    _wifi_monitor_last_ip = nil,
     _was_running_before_suspend = false,
     _standby_prevented = false,
     _qr_widget = nil,
 }
 
 local DEFAULT_PORT = 8080
+local WIFI_MONITOR_INTERVAL_SECONDS = 5
 
 function FileSyncManager:getPort()
     if self._port then return self._port end
@@ -65,6 +71,83 @@ function FileSyncManager:buildURL(ip, port)
         return "http://" .. ip
     end
     return "http://" .. ip .. ":" .. port
+end
+
+function FileSyncManager:_stopWifiMonitor()
+    self._wifi_monitor_active = false
+    self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
+    self._wifi_monitor_last_online = nil
+    self._wifi_monitor_last_ip = nil
+end
+
+function FileSyncManager:_pollWifiMonitor()
+    if not self._restart_desired and not self._running then
+        self:_stopWifiMonitor()
+        return
+    end
+
+    local wifi_on = NetworkMgr and NetworkMgr.isWifiOn and NetworkMgr:isWifiOn() or false
+    local current_ip = wifi_on and self:getLocalIP() or nil
+    local is_online = wifi_on and current_ip ~= nil
+    local was_online = self._wifi_monitor_last_online
+    local previous_ip = self._wifi_monitor_last_ip
+
+    self._wifi_monitor_last_online = is_online
+    self._wifi_monitor_last_ip = current_ip
+
+    if self._running then
+        if not is_online then
+            logger.info("FileSync: WiFi lost while server was running; stopping and waiting for reconnect")
+            self:stop(true, false, true)
+            return
+        end
+
+        if previous_ip and current_ip and previous_ip ~= current_ip then
+            logger.info("FileSync: WiFi IP changed from", previous_ip, "to", current_ip, "- restarting server")
+            self:stop(true, false, true)
+            self:start(true)
+            return
+        end
+
+        return
+    end
+
+    if self._restart_desired and was_online == false and is_online then
+        logger.info("FileSync: WiFi reconnected; restarting server")
+        self:start(true)
+    end
+end
+
+function FileSyncManager:_ensureWifiMonitor()
+    if self._wifi_monitor_active then
+        return
+    end
+
+    self._wifi_monitor_active = true
+    self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
+    local generation = self._wifi_monitor_generation
+
+    local function tick()
+        if not self._wifi_monitor_active or self._wifi_monitor_generation ~= generation then
+            return
+        end
+
+        self:_pollWifiMonitor()
+
+        if self._wifi_monitor_active and self._wifi_monitor_generation == generation then
+            UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+        end
+    end
+
+    UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+end
+
+function FileSyncManager:_refreshWifiMonitor()
+    if self._restart_desired or self._running then
+        self:_ensureWifiMonitor()
+    else
+        self:_stopWifiMonitor()
+    end
 end
 
 function FileSyncManager:configurePort()
@@ -238,6 +321,8 @@ function FileSyncManager:start(silent)
     self._running = true
     self._ip = ip
     self._port = port
+    self._restart_desired = true
+    self:_refreshWifiMonitor()
     self:preventStandby()
     logger.info("FileSync: Server started on", self:buildURL(ip, port))
 
@@ -246,7 +331,7 @@ function FileSyncManager:start(silent)
     end
 end
 
-function FileSyncManager:stop(silent, keep_qr_screen)
+function FileSyncManager:stop(silent, keep_qr_screen, preserve_restart_intent)
     if not self._running and not self._server and not self._standby_prevented then
         return
     end
@@ -269,7 +354,12 @@ function FileSyncManager:stop(silent, keep_qr_screen)
     end
 
     self._running = false
+    if not preserve_restart_intent then
+        self._restart_desired = false
+    end
     self:allowStandby()
+    self._ip = nil
+    self:_refreshWifiMonitor()
     logger.info("FileSync: Server stopped")
 
     if not silent then

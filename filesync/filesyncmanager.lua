@@ -32,12 +32,18 @@ local FileSyncManager = {
     _server = nil,
     _port = nil,
     _ip = nil,
+    _restart_desired = false,
+    _wifi_monitor_active = false,
+    _wifi_monitor_generation = 0,
+    _wifi_monitor_last_online = nil,
+    _wifi_monitor_last_ip = nil,
     _was_running_before_suspend = false,
     _standby_prevented = false,
     _qr_widget = nil,
 }
 
 local DEFAULT_PORT = 8080
+local WIFI_MONITOR_INTERVAL_SECONDS = 5
 
 function FileSyncManager:getPort()
     if self._port then return self._port end
@@ -58,6 +64,119 @@ end
 function FileSyncManager:setSafeMode(enabled)
     G_reader_settings:saveSetting("filesync_safe_mode", enabled)
     G_reader_settings:flush()
+end
+
+function FileSyncManager:buildURL(ip, port)
+    if port == 80 then
+        return "http://" .. ip
+    end
+    return "http://" .. ip .. ":" .. port
+end
+
+function FileSyncManager:_isPortInUseError(err)
+    local message = tostring(err):lower()
+    return message:find("address already in use", 1, true)
+        or message:find("already in use", 1, true)
+end
+
+function FileSyncManager:_formatStartError(err, ip, port)
+    local message = tostring(err)
+    local lower = message:lower()
+
+    if self:_isPortInUseError(message) then
+        if port == 80 and ip then
+            return T(_("FileSync could not use the default address %1 because another service is already using port %2.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."), self:buildURL(ip, port), port)
+        end
+
+        return T(_("Failed to start server on port %1.\n\nAnother service is already using this port.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."), port)
+    end
+
+    if port < 1024 and (
+        lower:find("permission denied", 1, true)
+        or lower:find("access denied", 1, true)
+        or lower:find("operation not permitted", 1, true)
+    ) then
+        return T(_("Failed to start server on port %1.\n\nThis port may require root or admin privileges on this device.\n\nTry changing the Server Port setting to 8080 or higher."), port)
+    end
+
+    return T(_("Failed to start server: %1"), message)
+end
+
+function FileSyncManager:_stopWifiMonitor()
+    self._wifi_monitor_active = false
+    self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
+    self._wifi_monitor_last_online = nil
+    self._wifi_monitor_last_ip = nil
+end
+
+function FileSyncManager:_pollWifiMonitor()
+    if not self._restart_desired and not self._running then
+        self:_stopWifiMonitor()
+        return
+    end
+
+    local wifi_on = NetworkMgr and NetworkMgr.isWifiOn and NetworkMgr:isWifiOn() or false
+    local current_ip = wifi_on and self:getLocalIP() or nil
+    local is_online = wifi_on and current_ip ~= nil
+    local was_online = self._wifi_monitor_last_online
+    local previous_ip = self._wifi_monitor_last_ip
+
+    self._wifi_monitor_last_online = is_online
+    self._wifi_monitor_last_ip = current_ip
+
+    if self._running then
+        if not is_online then
+            logger.info("FileSync: WiFi lost while server was running; stopping and waiting for reconnect")
+            self:stop(true, false, true)
+            return
+        end
+
+        if previous_ip and current_ip and previous_ip ~= current_ip then
+            logger.info("FileSync: WiFi IP changed from", previous_ip, "to", current_ip, "- restarting server")
+            self:stop(true, false, true)
+            self:start(true)
+            return
+        end
+
+        return
+    end
+
+    if self._restart_desired and was_online == false and is_online then
+        logger.info("FileSync: WiFi reconnected; restarting server")
+        self:start(true)
+    end
+end
+
+function FileSyncManager:_ensureWifiMonitor()
+    if self._wifi_monitor_active then
+        return
+    end
+
+    self._wifi_monitor_active = true
+    self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
+    local generation = self._wifi_monitor_generation
+
+    local function tick()
+        if not self._wifi_monitor_active or self._wifi_monitor_generation ~= generation then
+            return
+        end
+
+        self:_pollWifiMonitor()
+
+        if self._wifi_monitor_active and self._wifi_monitor_generation == generation then
+            UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+        end
+    end
+
+    UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+end
+
+function FileSyncManager:_refreshWifiMonitor()
+    if self._restart_desired or self._running then
+        self:_ensureWifiMonitor()
+    else
+        self:_stopWifiMonitor()
+    end
 end
 
 function FileSyncManager:configurePort()
@@ -82,7 +201,7 @@ function FileSyncManager:configurePort()
                     is_enter_default = true,
                     callback = function()
                         local new_port = tonumber(port_dialog:getInputText())
-                        if new_port and new_port >= 1024 and new_port <= 65535 then
+                        if new_port and ((new_port == 80) or (new_port >= 1024 and new_port <= 65535)) then
                             self:setPort(new_port)
                             UIManager:close(port_dialog)
                             UIManager:show(InfoMessage:new{
@@ -91,7 +210,7 @@ function FileSyncManager:configurePort()
                             })
                         else
                             UIManager:show(InfoMessage:new{
-                                text = _("Invalid port. Please enter a number between 1024 and 65535."),
+                                text = _("Invalid port. Please enter 80 or a number between 1024 and 65535."),
                                 timeout = 3,
                             })
                         end
@@ -216,7 +335,7 @@ function FileSyncManager:start(silent)
         logger.err("FileSync: Failed to start server:", err)
         if not silent then
             UIManager:show(InfoMessage:new{
-                text = T(_("Failed to start server: %1"), tostring(err)),
+                text = self:_formatStartError(err, ip, port),
                 timeout = 5,
             })
         end
@@ -231,21 +350,25 @@ function FileSyncManager:start(silent)
     self._running = true
     self._ip = ip
     self._port = port
+    self._restart_desired = true
+    self:_refreshWifiMonitor()
     self:preventStandby()
-    logger.info("FileSync: Server started on", ip .. ":" .. port)
+    logger.info("FileSync: Server started on", self:buildURL(ip, port))
 
     if not silent then
         self:showQRCode()
     end
 end
 
-function FileSyncManager:stop(silent)
-    if not self._running then
+function FileSyncManager:stop(silent, keep_qr_screen, preserve_restart_intent)
+    if not self._running and not self._server and not self._standby_prevented then
         return
     end
 
     -- Close QR screen if open
-    self:closeQRScreen()
+    if not keep_qr_screen then
+        self:closeQRScreen()
+    end
 
     if self._server then
         pcall(function()
@@ -260,7 +383,12 @@ function FileSyncManager:stop(silent)
     end
 
     self._running = false
+    if not preserve_restart_intent then
+        self._restart_desired = false
+    end
     self:allowStandby()
+    self._ip = nil
+    self:_refreshWifiMonitor()
     logger.info("FileSync: Server stopped")
 
     if not silent then
@@ -268,7 +396,6 @@ function FileSyncManager:stop(silent)
             text = _("FileSync server stopped."),
             timeout = 2,
         })
-        UIManager:restartKOReader()
     end
 end
 
@@ -321,6 +448,13 @@ function FileSyncManager:closeQRScreen()
     end
 end
 
+function FileSyncManager:_showQRCodeOpenError(err)
+    logger.err("FileSync: Failed to open QR screen:", err)
+    UIManager:show(InfoMessage:new{
+        text = T(_("Failed to open QR screen:\n%1"), tostring(err)),
+    })
+end
+
 function FileSyncManager:showQRCode()
     if not self._running or not self._ip then
         UIManager:show(InfoMessage:new{
@@ -330,214 +464,224 @@ function FileSyncManager:showQRCode()
         return
     end
 
-    -- Close any existing QR screen first
-    self:closeQRScreen()
+    local ok, err = pcall(function()
+        self:closeQRScreen()
 
-    local url = "http://" .. self._ip .. ":" .. self._port
-    local screen_width = Screen:getWidth()
-    local screen_height = Screen:getHeight()
+        local url = self:buildURL(self._ip, self._port)
+        local screen_width = Screen:getWidth()
+        local screen_height = Screen:getHeight()
+        local full_screen_dimen = Geom:new{ x = 0, y = 0, w = screen_width, h = screen_height }
 
-    -- Build the QR code widget
-    local qr_size = Screen:scaleBySize(260)
-    local qr_widget = QRWidget:new{
-        text = url,
-        width = qr_size,
-        height = qr_size,
-    }
+        local qr_size = Screen:scaleBySize(260)
+        local qr_widget = QRWidget:new{
+            text = url,
+            width = qr_size,
+            height = qr_size,
+        }
 
-    -- Icon + Title row
-    local icon_dir = debug.getinfo(1, "S").source:match("@(.+)"):match("(.*/)")
-    local icon_size = Screen:scaleBySize(36)
-    local icon_widget = ImageWidget:new{
-        file = icon_dir .. "icon.png",
-        width = icon_size,
-        height = icon_size,
-        alpha = true,
-    }
-    local title_text = TextWidget:new{
-        text = _("FileSync"),
-        face = Font:getFace("infofont", 48),
-        bold = true,
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-    local title_widget = HorizontalGroup:new{
-        align = "center",
-        icon_widget,
-        HorizontalSpan:new{ width = Screen:scaleBySize(10) },
-        title_text,
-    }
+        local title_text = TextWidget:new{
+            text = _("FileSync"),
+            face = Font:getFace("infofont", 34),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local title_widget = title_text
 
-    -- URL text
-    local url_widget = TextWidget:new{
-        text = url,
-        face = Font:getFace("infofont", 22),
-        fgcolor = Blitbuffer.COLOR_BLACK,
-        max_width = screen_width - Screen:scaleBySize(40),
-    }
+        local source = debug.getinfo(1, "S").source or ""
+        local icon_dir = source:match("@(.*/)") or ""
+        if icon_dir ~= "" then
+            local icon_size = Screen:scaleBySize(46)
+            local icon_file = icon_dir .. "icon.png"
+            if Screen.night_mode then
+                local dark_icon_file = icon_dir .. "icon_dark.png"
+                local dark_icon_handle = io.open(dark_icon_file, "rb")
+                if dark_icon_handle then
+                    dark_icon_handle:close()
+                    icon_file = dark_icon_file
+                end
+            end
+            local ok_icon, icon_widget = pcall(function()
+                return ImageWidget:new{
+                    file = icon_file,
+                    width = icon_size,
+                    height = icon_size,
+                    alpha = true,
+                }
+            end)
+            if ok_icon and icon_widget then
+                title_widget = HorizontalGroup:new{
+                    align = "center",
+                    icon_widget,
+                    HorizontalSpan:new{ width = Screen:scaleBySize(8) },
+                    title_text,
+                }
+            else
+                logger.warn("FileSync: Failed to load QR header icon:", icon_widget)
+            end
+        end
 
-    -- Instructions text
-    local instructions_widget = TextBoxWidget:new{
-        text = _("Scan the QR code or enter the URL\nin your browser.\n\nBoth devices must be on the same WiFi network."),
-        face = Font:getFace("smallinfofont", 20),
-        width = screen_width * 0.65,
-        alignment = "center",
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
+        local url_widget = TextWidget:new{
+            text = url,
+            face = Font:getFace("infofont", 22),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            max_width = screen_width - Screen:scaleBySize(40),
+        }
 
-    -- Stop Server button
-    local button_text = TextWidget:new{
-        text = _("Stop Server"),
-        face = Font:getFace("infofont", 20),
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-    local stop_button = FrameContainer:new{
-        bordersize = Size.border.button,
-        radius = Size.radius.button,
-        padding = Screen:scaleBySize(10),
-        padding_left = Screen:scaleBySize(30),
-        padding_right = Screen:scaleBySize(30),
-        background = Blitbuffer.COLOR_WHITE,
-        button_text,
-    }
+        local instructions_widget = TextBoxWidget:new{
+            text = _("Scan the QR code or enter the URL\nin your browser.\n\nBoth devices must be on the same WiFi network."),
+            face = Font:getFace("smallinfofont", 20),
+            width = math.floor(screen_width * 0.65),
+            alignment = "center",
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
 
-    -- Vertical layout
-    local vertical_content = VerticalGroup:new{
-        align = "center",
-        VerticalSpan:new{ width = Screen:scaleBySize(40) },
-        title_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(30) },
-        qr_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(20) },
-        url_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(15) },
-        instructions_widget,
-        VerticalSpan:new{ width = Screen:scaleBySize(30) },
-        stop_button,
-    }
+        local button_text = TextWidget:new{
+            text = _("Stop Server"),
+            face = Font:getFace("infofont", 20),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local stop_button = FrameContainer:new{
+            bordersize = Size.border.button,
+            radius = Size.radius.button,
+            padding = Screen:scaleBySize(10),
+            padding_left = Screen:scaleBySize(30),
+            padding_right = Screen:scaleBySize(30),
+            background = Blitbuffer.COLOR_WHITE,
+            button_text,
+        }
 
-    -- X (close) button in the top-right corner
-    local close_button_text = TextWidget:new{
-        text = "\u{00D7}", -- multiplication sign as X
-        face = Font:getFace("infofont", 32),
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-    local close_button = FrameContainer:new{
-        bordersize = Size.border.button,
-        radius = Size.radius.button,
-        padding = Screen:scaleBySize(6),
-        padding_left = Screen:scaleBySize(12),
-        padding_right = Screen:scaleBySize(12),
-        background = Blitbuffer.COLOR_WHITE,
-        close_button_text,
-    }
-    local close_button_row = RightContainer:new{
-        dimen = { w = screen_width - Screen:scaleBySize(10), h = close_button:getSize().h + Screen:scaleBySize(10) },
-        FrameContainer:new{
+        local close_button_box_size = Screen:scaleBySize(40)
+        local close_button_text = TextWidget:new{
+            text = "\u{00D7}",
+            face = Font:getFace("infofont", 30),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local close_button = FrameContainer:new{
+            bordersize = Size.border.button,
+            radius = Screen:scaleBySize(8),
+            padding = 0,
+            background = Blitbuffer.COLOR_WHITE,
+            CenterContainer:new{
+                dimen = Geom:new{
+                    w = close_button_box_size,
+                    h = close_button_box_size,
+                },
+                close_button_text,
+            },
+        }
+
+        local vertical_content = VerticalGroup:new{
+            align = "center",
+            VerticalSpan:new{ width = Screen:scaleBySize(40) },
+            title_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(30) },
+            qr_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(20) },
+            url_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(15) },
+            instructions_widget,
+            VerticalSpan:new{ width = Screen:scaleBySize(30) },
+            stop_button,
+        }
+
+        local close_button_row = RightContainer:new{
+            dimen = Geom:new{
+                x = 0,
+                y = 0,
+                w = screen_width - Screen:scaleBySize(10),
+                h = close_button_box_size + Screen:scaleBySize(10),
+            },
+            FrameContainer:new{
+                bordersize = 0,
+                padding = 0,
+                padding_top = Screen:scaleBySize(10),
+                padding_right = Screen:scaleBySize(10),
+                background = Blitbuffer.COLOR_WHITE,
+                close_button,
+            },
+        }
+
+        local centered_content = CenterContainer:new{
+            dimen = full_screen_dimen,
+            vertical_content,
+        }
+
+        local overlap = OverlapGroup:new{
+            dimen = full_screen_dimen,
+            centered_content,
+            close_button_row,
+        }
+
+        local frame = FrameContainer:new{
+            width = screen_width,
+            height = screen_height,
             bordersize = 0,
             padding = 0,
-            padding_top = Screen:scaleBySize(10),
-            padding_right = Screen:scaleBySize(10),
+            margin = 0,
             background = Blitbuffer.COLOR_WHITE,
-            close_button,
-        },
-    }
+            overlap,
+        }
 
-    -- Center everything on screen
-    local centered_content = CenterContainer:new{
-        dimen = { w = screen_width, h = screen_height },
-        vertical_content,
-    }
+        local widget = InputContainer:new{
+            dimen = full_screen_dimen,
+            width = screen_width,
+            height = screen_height,
+        }
+        widget[1] = frame
+        widget._stop_button = stop_button
+        widget._close_button = close_button
+        widget._manager = self
 
-    -- Layer the close button on top of centered content using OverlapGroup
-    local overlap = OverlapGroup:new{
-        dimen = { w = screen_width, h = screen_height },
-        centered_content,
-        close_button_row,
-    }
-
-    -- Full-screen white background container
-    local frame = FrameContainer:new{
-        width = screen_width,
-        height = screen_height,
-        bordersize = 0,
-        padding = 0,
-        margin = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        overlap,
-    }
-
-    -- Build the InputContainer for handling taps
-    local widget = InputContainer:new{
-        width = screen_width,
-        height = screen_height,
-    }
-    widget[1] = frame
-
-    -- Store button references for hit testing
-    widget._stop_button = stop_button
-    widget._close_button = close_button
-    widget._manager = self
-
-    widget.ges_events = {
-        Tap = {
-            GestureRange:new{
-                ges = "tap",
-                range = Geom:new{ x = 0, y = 0, w = screen_width, h = screen_height },
+        widget.ges_events = {
+            Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = full_screen_dimen,
+                },
             },
-        },
-    }
+        }
 
-    function widget:onTap(_event, ges)
-        if not ges then return true end
-        local x, y = ges.pos.x, ges.pos.y
+        function widget:onTap(_event, ges)
+            if not ges then return true end
+            local x, y = ges.pos.x, ges.pos.y
 
-        -- Check if the tap is on the Stop Server button
-        local btn = self._stop_button
-        if btn.dimen then
-            if x >= btn.dimen.x and x <= btn.dimen.x + btn.dimen.w
-               and y >= btn.dimen.y and y <= btn.dimen.y + btn.dimen.h then
-                -- Stop button tapped: show feedback, then stop and restart
-                self._manager:closeQRScreen()
-                UIManager:show(InfoMessage:new{
-                    text = _("Stopping server..."),
-                    timeout = 2,
-                })
-                -- Schedule the actual stop+restart after a brief moment so the
-                -- InfoMessage renders on the e-ink screen before the restart
-                UIManager:scheduleIn(0.5, function()
-                    self._manager:stop(true)
-                    UIManager:restartKOReader()
-                end)
-                return true
+            local stop_btn = self._stop_button
+            if stop_btn and stop_btn.dimen then
+                if x >= stop_btn.dimen.x and x <= stop_btn.dimen.x + stop_btn.dimen.w
+                   and y >= stop_btn.dimen.y and y <= stop_btn.dimen.y + stop_btn.dimen.h then
+                    self._manager:stop(false, true)
+                    return true
+                end
             end
+
+            local close_btn = self._close_button
+            if close_btn and close_btn.dimen then
+                if x >= close_btn.dimen.x and x <= close_btn.dimen.x + close_btn.dimen.w
+                   and y >= close_btn.dimen.y and y <= close_btn.dimen.y + close_btn.dimen.h then
+                    self._manager:closeQRScreen()
+                    UIManager:show(InfoMessage:new{
+                        text = _("Server running in the background. Stop the server to save battery."),
+                        timeout = 4,
+                    })
+                    return true
+                end
+            end
+
+            return true
         end
 
-        -- Check if the tap is on the X close button
-        local close_btn = self._close_button
-        if close_btn.dimen then
-            if x >= close_btn.dimen.x and x <= close_btn.dimen.x + close_btn.dimen.w
-               and y >= close_btn.dimen.y and y <= close_btn.dimen.y + close_btn.dimen.h then
-                -- X button tapped: dismiss QR screen, show info, keep server running
-                self._manager:closeQRScreen()
-                UIManager:show(InfoMessage:new{
-                    text = _("Server running in the background. Stop the server to save battery."),
-                    timeout = 4,
-                })
-                return true
-            end
+        function widget:onClose()
+            return true
         end
 
-        -- Tap anywhere else: do nothing (no dismiss)
-        return true
-    end
+        self._qr_widget = widget
+        UIManager:show(widget, "full")
+    end)
 
-    function widget:onClose()
-        -- Only dismiss via X button, not via generic close/back key
-        return true
+    if not ok then
+        self._qr_widget = nil
+        self:_showQRCodeOpenError(err)
     end
-
-    self._qr_widget = widget
-    UIManager:show(widget, "full")
 end
 
 function FileSyncManager:openKindleFirewall(port)

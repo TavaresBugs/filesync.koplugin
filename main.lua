@@ -1,4 +1,5 @@
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local T = require("ffi/util").template
 local ok_i18n, plugin_gettext = pcall(require, "filesync/filesync_i18n")
 local _ = ok_i18n and plugin_gettext or require("gettext")
 
@@ -17,13 +18,10 @@ function FileSync:addToMainMenu(menu_items)
         sorting_hint = "network",
         sub_item_table = {
             {
-                text_func = function()
+                text = _("Server status"),
+                checked_func = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
-                    if FileSyncManager:isRunning() then
-                        return _("Stop file server")
-                    else
-                        return _("Start file server")
-                    end
+                    return FileSyncManager:isRunning()
                 end,
                 callback = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
@@ -32,14 +30,6 @@ function FileSync:addToMainMenu(menu_items)
                     else
                         FileSyncManager:checkBatteryAndStart()
                     end
-                end,
-                keep_menu_open = false,
-            },
-            {
-                text = _("Server port"),
-                callback = function()
-                    local FileSyncManager = require("filesync/filesyncmanager")
-                    FileSyncManager:configurePort()
                 end,
                 keep_menu_open = true,
             },
@@ -56,14 +46,25 @@ function FileSync:addToMainMenu(menu_items)
                 keep_menu_open = true,
             },
             {
-                text = _("Show QR code"),
-                enabled_func = function()
+                text_func = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
-                    return FileSyncManager:isRunning()
+                    return T(_("Server port (%1)"), FileSyncManager:getPort())
                 end,
                 callback = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
+                    FileSyncManager:configurePort()
+                end,
+                keep_menu_open = true,
+            },
+            {
+                text = _("Show QR code"),
+                callback = function()
+                    local FileSyncManager = require("filesync/filesyncmanager")
                     FileSyncManager:showQRCode()
+                end,
+                enabled_func = function()
+                    local FileSyncManager = require("filesync/filesyncmanager")
+                    return FileSyncManager:isRunning()
                 end,
                 keep_menu_open = false,
             },
@@ -86,7 +87,7 @@ function FileSync:onSuspend()
     local FileSyncManager = require("filesync/filesyncmanager")
     if FileSyncManager:isRunning() then
         FileSyncManager._was_running_before_suspend = true
-        FileSyncManager:stop(true) -- silent stop
+        FileSyncManager:stop(true, false, true) -- silent stop, preserve restart intent
     end
 end
 

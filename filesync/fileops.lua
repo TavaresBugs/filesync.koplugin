@@ -7,6 +7,13 @@ if not ok then
     error("FileSync: cannot load LFS filesystem module")
 end
 local logger = require("logger")
+local bitops = rawget(_G, "bit32") or rawget(_G, "bit")
+if not bitops then
+    local bit_ok, loaded_bitops = pcall(require, "bit")
+    if bit_ok then
+        bitops = loaded_bitops
+    end
+end
 
 local SAFE_MODE_EXTENSIONS = {
     epub = true, pdf = true, mobi = true, azw = true, azw3 = true,
@@ -32,19 +39,255 @@ local MOBI_EXTENSIONS = {
     mobi = true, azw = true, azw3 = true, prc = true, pdb = true,
 }
 
+local function normalize_root_path(path)
+    local normalized = tostring(path or "/")
+    normalized = normalized:gsub("//+", "/"):gsub("^%s+", ""):gsub("%s+$", "")
+    if normalized == "" then
+        normalized = "/"
+    end
+    if normalized ~= "/" and normalized:sub(-1) == "/" then
+        normalized = normalized:sub(1, -2)
+    end
+    if normalized:sub(1, 1) ~= "/" then
+        normalized = "/" .. normalized
+    end
+    return normalized
+end
+
+local function is_path_within_root(full_path, root_path)
+    if root_path == "/" then
+        return full_path:sub(1, 1) == "/"
+    end
+    return full_path == root_path or full_path:sub(1, #root_path + 1) == root_path .. "/"
+end
+
 local FileOps = {
     _root_dir = "/mnt/us",
+    _default_scope_id = "storage",
+    _scope_configs = nil,
 }
 
+local function command_succeeded(ok, why, code)
+    if ok == true then
+        return true
+    end
+    if type(ok) == "number" then
+        return ok == 0
+    end
+    if why == "exit" then
+        return code == 0
+    end
+    return false
+end
+
+local function normalize_uint32(value)
+    value = tonumber(value) or 0
+    value = value % 4294967296
+    if value < 0 then
+        value = value + 4294967296
+    end
+    return value
+end
+
+local function band_uint32(a, b)
+    a = normalize_uint32(a)
+    b = normalize_uint32(b)
+    if bitops and bitops.band then
+        return normalize_uint32(bitops.band(a, b))
+    end
+
+    local result = 0
+    local bit_value = 1
+    while a > 0 or b > 0 do
+        local a_bit = a % 2
+        local b_bit = b % 2
+        if a_bit == 1 and b_bit == 1 then
+            result = result + bit_value
+        end
+        a = math.floor(a / 2)
+        b = math.floor(b / 2)
+        bit_value = bit_value * 2
+    end
+
+    return normalize_uint32(result)
+end
+
+local function bxor_uint32(a, b)
+    a = normalize_uint32(a)
+    b = normalize_uint32(b)
+    if bitops and bitops.bxor then
+        return normalize_uint32(bitops.bxor(a, b))
+    end
+
+    local result = 0
+    local bit_value = 1
+    while a > 0 or b > 0 do
+        local a_bit = a % 2
+        local b_bit = b % 2
+        if a_bit ~= b_bit then
+            result = result + bit_value
+        end
+        a = math.floor(a / 2)
+        b = math.floor(b / 2)
+        bit_value = bit_value * 2
+    end
+
+    return normalize_uint32(result)
+end
+
+local function rshift_uint32(value, shift)
+    value = normalize_uint32(value)
+    if shift <= 0 then
+        return value
+    end
+    if shift >= 32 then
+        return 0
+    end
+    if bitops and bitops.rshift then
+        return normalize_uint32(bitops.rshift(value, shift))
+    end
+    return math.floor(value / (2 ^ shift))
+end
+
+local function pack_uint16_le(value)
+    value = math.floor(tonumber(value) or 0) % 65536
+    return string.char(
+        value % 256,
+        math.floor(value / 256) % 256
+    )
+end
+
+local function pack_uint32_le(value)
+    value = normalize_uint32(value)
+    return string.char(
+        value % 256,
+        math.floor(value / 256) % 256,
+        math.floor(value / 65536) % 256,
+        math.floor(value / 16777216) % 256
+    )
+end
+
+local function to_zip_dos_datetime(timestamp)
+    local date_table = timestamp and os.date("*t", timestamp) or nil
+    if not date_table then
+        return 0, 33
+    end
+
+    local year = math.max(1980, math.min(2107, tonumber(date_table.year) or 1980))
+    local month = math.max(1, math.min(12, tonumber(date_table.month) or 1))
+    local day = math.max(1, math.min(31, tonumber(date_table.day) or 1))
+    local hour = math.max(0, math.min(23, tonumber(date_table.hour) or 0))
+    local min = math.max(0, math.min(59, tonumber(date_table.min) or 0))
+    local sec = math.max(0, math.min(59, tonumber(date_table.sec) or 0))
+
+    local dos_time = hour * 2048 + min * 32 + math.floor(sec / 2)
+    local dos_date = (year - 1980) * 512 + month * 32 + day
+    return dos_time, dos_date
+end
+
+local CRC32_TABLE = {}
+for i = 0, 255 do
+    local crc = i
+    for _ = 1, 8 do
+        if band_uint32(crc, 1) == 1 then
+            crc = bxor_uint32(rshift_uint32(crc, 1), 0xEDB88320)
+        else
+            crc = rshift_uint32(crc, 1)
+        end
+    end
+    CRC32_TABLE[i] = normalize_uint32(crc)
+end
+
+local function update_crc32(crc, chunk)
+    crc = normalize_uint32(crc)
+    for i = 1, #chunk do
+        local byte = string.byte(chunk, i)
+        local idx = band_uint32(bxor_uint32(crc, byte), 0xFF)
+        crc = bxor_uint32(rshift_uint32(crc, 8), CRC32_TABLE[idx])
+    end
+    return normalize_uint32(crc)
+end
+
 function FileOps:setRootDir(dir)
-    self._root_dir = dir
+    self._root_dir = normalize_root_path(dir)
+    self:_rebuildScopeConfigs()
+end
+
+function FileOps:_rebuildScopeConfigs()
+    local storage_root = normalize_root_path(self._root_dir)
+    self._scope_configs = {
+        storage = {
+            id = "storage",
+            root_path = storage_root,
+            root_only = false,
+        },
+    }
+
+    if storage_root ~= "/" then
+        self._scope_configs.system = {
+            id = "system",
+            root_path = "/",
+            root_only = true,
+        }
+    end
+end
+
+function FileOps:_ensureScopeConfigs()
+    if not self._scope_configs then
+        self:_rebuildScopeConfigs()
+    end
+end
+
+function FileOps:getDefaultScopeId()
+    return self._default_scope_id
+end
+
+function FileOps:getNavigationScopes(allow_root_scopes)
+    self:_ensureScopeConfigs()
+
+    local scopes = {}
+    local ordered_scope_ids = { self._default_scope_id, "system" }
+    for _, scope_id in ipairs(ordered_scope_ids) do
+        local scope = self._scope_configs[scope_id]
+        if scope and (not scope.root_only or allow_root_scopes) then
+            table.insert(scopes, {
+                id = scope.id,
+                root_path = scope.root_path,
+            })
+        end
+    end
+
+    return scopes
+end
+
+function FileOps:_getScopeConfig(scope_id, options)
+    self:_ensureScopeConfigs()
+    options = options or {}
+
+    local resolved_scope_id = scope_id or self._default_scope_id
+    local scope = self._scope_configs[resolved_scope_id]
+    if not scope then
+        return nil, "Unknown filesystem scope"
+    end
+
+    if scope.root_only and not options.allow_root_scopes then
+        return nil, "Scope not available in current mode"
+    end
+
+    return scope
 end
 
 --- Resolve and validate a path, preventing path traversal.
 --- Returns the full absolute path, or nil and an error message.
-function FileOps:_resolvePath(rel_path)
+function FileOps:_resolvePath(rel_path, options)
+    options = options or {}
     if not rel_path or rel_path == "" then
         rel_path = "/"
+    end
+
+    local scope, scope_err = self:_getScopeConfig(options.scope, options)
+    if not scope then
+        return nil, scope_err
     end
 
     -- Normalize: remove double slashes, trim whitespace
@@ -60,7 +303,7 @@ function FileOps:_resolvePath(rel_path)
         rel_path = "/" .. rel_path
     end
 
-    local full_path = self._root_dir .. rel_path
+    local full_path = scope.root_path .. rel_path
 
     -- Normalize again after combining
     full_path = full_path:gsub("//+", "/")
@@ -70,12 +313,12 @@ function FileOps:_resolvePath(rel_path)
         full_path = full_path:sub(1, -2)
     end
 
-    -- Verify the resolved path is under root_dir
-    if full_path:sub(1, #self._root_dir) ~= self._root_dir then
+    -- Verify the resolved path is under the selected root
+    if not is_path_within_root(full_path, scope.root_path) then
         return nil, "Access denied: path outside root directory"
     end
 
-    return full_path
+    return full_path, nil, scope
 end
 
 --- Validate a filename (no slashes, no dots-only, no null bytes)
@@ -95,13 +338,25 @@ function FileOps:_validateFilename(name)
     return true
 end
 
---- Get the relative path from root_dir
-function FileOps:_getRelativePath(full_path)
-    if full_path:sub(1, #self._root_dir) == self._root_dir then
-        local rel = full_path:sub(#self._root_dir + 1)
-        if rel == "" then rel = "/" end
+--- Get the relative path from the selected scope root.
+function FileOps:_getRelativePath(full_path, scope_id)
+    self:_ensureScopeConfigs()
+
+    local scope = self._scope_configs[scope_id or self._default_scope_id]
+    local root_path = scope and scope.root_path or self._root_dir
+
+    if root_path == "/" then
+        return full_path == "" and "/" or full_path
+    end
+
+    if is_path_within_root(full_path, root_path) then
+        local rel = full_path:sub(#root_path + 1)
+        if rel == "" then
+            rel = "/"
+        end
         return rel
     end
+
     return full_path
 end
 
@@ -193,9 +448,15 @@ function FileOps:isExtensionSafe(filename)
     return SAFE_MODE_EXTENSIONS[ext:lower()] == true
 end
 
---- List directory contents
-function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
-    local full_path, err = self:_resolvePath(rel_path)
+--- List directory contents.
+function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, options)
+    options = options or {}
+    local safe_mode = options.safe_mode == true
+    local include_hidden = options.include_hidden == true and not safe_mode
+    local full_path, err, scope = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = not safe_mode,
+    })
     if not full_path then
         return nil, err
     end
@@ -209,9 +470,8 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
     local ok, iter_err = pcall(function()
         for name in lfs.dir(full_path) do
             if name ~= "." and name ~= ".." then
-                -- Skip hidden files starting with .
-                if name:sub(1, 1) ~= "." then
-                    -- Apply filter if present
+                local is_hidden = name:sub(1, 1) == "."
+                if not is_hidden or include_hidden then
                     local include = true
                     if filter and filter ~= "" then
                         include = name:lower():find(filter:lower(), 1, true) ~= nil
@@ -222,33 +482,31 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
                         local entry_attr = lfs.attributes(entry_path)
                         if entry_attr then
                             local is_dir = entry_attr.mode == "directory"
-                            -- Apply safe mode filter: only dirs and whitelisted extensions
                             if safe_mode and not is_dir and not self:isExtensionSafe(name) then
-                                -- skip non-whitelisted file
+                                -- Skip non-whitelisted file.
                             elseif safe_mode and is_dir and name:match("%.sdr$") then
-                                -- skip .sdr metadata directories in safe mode
+                                -- Skip metadata directory in safe mode.
                             else
                                 local entry = {
                                     name = name,
-                                    path = self:_getRelativePath(entry_path),
+                                    path = self:_getRelativePath(entry_path, scope.id),
                                     is_dir = is_dir,
+                                    is_hidden = is_hidden,
                                     size = entry_attr.size or 0,
                                     size_formatted = self:_formatSize(entry_attr.size or 0),
                                     modified = entry_attr.modification or 0,
                                     type = is_dir and "directory" or self:_getFileType(name),
                                 }
-                                -- For directories, check if they are empty
                                 if is_dir then
                                     local child_count = 0
                                     for child_name in lfs.dir(entry_path) do
                                         if child_name ~= "." and child_name ~= ".." then
                                             child_count = child_count + 1
-                                            break -- only need to know if > 0
+                                            break
                                         end
                                     end
                                     entry.is_empty = (child_count == 0)
                                 end
-                                -- For non-directory files, check if a corresponding .sdr directory exists
                                 if not is_dir then
                                     local sdr_attr = lfs.attributes(entry_path .. ".sdr")
                                     if sdr_attr and sdr_attr.mode == "directory" then
@@ -315,65 +573,581 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
     end
 
     return {
-        path = rel_path or "/",
+        path = self:_getRelativePath(full_path, scope.id),
+        scope = scope.id,
         entries = entries,
         breadcrumbs = breadcrumbs,
         count = #entries,
     }
 end
 
---- Download a file, sending it directly to the client socket
---- When inline is true, serve with Content-Disposition: inline (for image previews)
-function FileOps:downloadFile(client, rel_path, server, inline)
-    local full_path, err = self:_resolvePath(rel_path)
-    if not full_path then
-        return false, err
+function FileOps:_runShellCommand(cmd)
+    local ok, why, code = os.execute(cmd)
+    if command_succeeded(ok, why, code) then
+        return true
+    end
+    return false, code or why or ok
+end
+
+function FileOps:_removeTempPath(path)
+    if not path or path == "" then
+        return
+    end
+    os.execute("rm -rf " .. self:_shellEscape(path) .. " 2>/dev/null")
+end
+
+function FileOps:_copyFileContents(src_path, dst_path)
+    local src_file, src_err = io.open(src_path, "rb")
+    if not src_file then
+        return false, "Cannot open source file: " .. tostring(src_err)
+    end
+
+    local dst_file, dst_err = io.open(dst_path, "wb")
+    if not dst_file then
+        src_file:close()
+        return false, "Cannot create destination file: " .. tostring(dst_err)
+    end
+
+    local chunk_size = 65536
+    while true do
+        local chunk, read_err = src_file:read(chunk_size)
+        if read_err then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot read source file: " .. tostring(read_err)
+        end
+        if not chunk then break end
+        local write_ok, write_err = dst_file:write(chunk)
+        if not write_ok then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot write destination file: " .. tostring(write_err)
+        end
+    end
+
+    local close_ok, close_err = dst_file:close()
+    src_file:close()
+    if close_ok == false then
+        os.remove(dst_path)
+        return false, "Cannot finalize destination file: " .. tostring(close_err)
+    end
+
+    return true
+end
+
+function FileOps:_streamDownload(client, full_path, server, inline, download_name, mime_type, cleanup_path)
+    local f = io.open(full_path, "rb")
+    if not f then
+        if cleanup_path then
+            self:_removeTempPath(cleanup_path)
+        end
+        return false, "Cannot open file"
     end
 
     local attr = lfs.attributes(full_path)
     if not attr or attr.mode ~= "file" then
+        f:close()
+        if cleanup_path then
+            self:_removeTempPath(cleanup_path)
+        end
         return false, "Not a file"
     end
 
-    local f = io.open(full_path, "rb")
-    if not f then
-        return false, "Cannot open file"
-    end
-
-    local filename = full_path:match("([^/]+)$") or "download"
-    local mime_type = self:_getMimeType(filename)
-    local file_size = attr.size
-
-    -- Send headers
+    local filename = download_name or (full_path:match("([^/]+)$") or "download")
+    local content_type = mime_type or self:_getMimeType(filename)
     local disposition = inline
         and ('inline; filename="' .. filename .. '"')
         or ('attachment; filename="' .. filename .. '"')
+
     server:sendResponseHeaders(client, 200, {
-        ["Content-Type"] = mime_type,
-        ["Content-Length"] = tostring(file_size),
+        ["Content-Type"] = content_type,
+        ["Content-Length"] = tostring(attr.size),
         ["Content-Disposition"] = disposition,
         ["Connection"] = "close",
     })
 
-    -- Send file in chunks
-    local CHUNK_SIZE = 65536
+    local chunk_size = 65536
     while true do
-        local chunk = f:read(CHUNK_SIZE)
+        local chunk = f:read(chunk_size)
         if not chunk then break end
-        local sent, send_err = client:send(chunk)
-        if not sent then
-            f:close()
-            return false, "Send error: " .. tostring(send_err)
+        local index = 1
+        while index <= #chunk do
+            local sent, send_err, partial = client:send(chunk, index)
+            if sent then
+                index = sent + 1
+            elseif partial and partial >= index then
+                index = partial + 1
+            else
+                f:close()
+                if cleanup_path then
+                    self:_removeTempPath(cleanup_path)
+                end
+                return false, "Send error: " .. tostring(send_err)
+            end
         end
     end
 
     f:close()
+    if cleanup_path then
+        self:_removeTempPath(cleanup_path)
+    end
+    return true
+end
+
+function FileOps:_copySafeDownloadTree(src_path, dst_path)
+    local attr = lfs.attributes(src_path)
+    if not attr then
+        return false, "Source does not exist"
+    end
+
+    if attr.mode == "directory" then
+        local ok, mkdir_err = lfs.mkdir(dst_path)
+        if not ok then
+            return false, "Cannot create temporary directory: " .. tostring(mkdir_err)
+        end
+
+        for name in lfs.dir(src_path) do
+            if name ~= "." and name ~= ".." then
+                if name:sub(1, 1) ~= "." then
+                    local child_src_path = src_path .. "/" .. name
+                    local child_attr = lfs.attributes(child_src_path)
+                    if child_attr then
+                        local is_dir = child_attr.mode == "directory"
+                        if not (is_dir and name:match("%.sdr$")) then
+                            if is_dir or self:isExtensionSafe(name) then
+                                local child_dst_path = dst_path .. "/" .. name
+                                local copy_ok, copy_err = self:_copySafeDownloadTree(child_src_path, child_dst_path)
+                                if not copy_ok then
+                                    return false, copy_err
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        return true
+    end
+
+    if attr.mode == "file" then
+        return self:_copyFileContents(src_path, dst_path)
+    end
+
+    return false, "Unsupported entry type"
+end
+
+function FileOps:_collectZipEntries(root_path, zip_path, entries)
+    local attr = lfs.attributes(root_path)
+    if not attr or attr.mode ~= "directory" then
+        return false, "Directory does not exist"
+    end
+
+    table.insert(entries, {
+        kind = "directory",
+        full_path = root_path,
+        zip_path = zip_path .. "/",
+        modified = attr.modification,
+    })
+
+    local children = {}
+    for name in lfs.dir(root_path) do
+        if name ~= "." and name ~= ".." then
+            table.insert(children, name)
+        end
+    end
+    table.sort(children)
+
+    for _, name in ipairs(children) do
+        local child_path = root_path .. "/" .. name
+        local child_attr = lfs.attributes(child_path)
+        if child_attr then
+            local child_zip_path = zip_path .. "/" .. name
+            if child_attr.mode == "directory" then
+                local ok, err = self:_collectZipEntries(child_path, child_zip_path, entries)
+                if not ok then
+                    return false, err
+                end
+            elseif child_attr.mode == "file" then
+                table.insert(entries, {
+                    kind = "file",
+                    full_path = child_path,
+                    zip_path = child_zip_path,
+                    modified = child_attr.modification,
+                })
+            end
+        end
+    end
+
+    return true
+end
+
+function FileOps:_writeZipEntries(archive_file, entries)
+    local archive_offset = 0
+    local central_records = {}
+    local zip_utf8_flag = 0x0800
+    local zip_data_descriptor_flag = 0x0008
+    local zip_store_method = 0
+    local chunk_size = 65536
+
+    local function write_archive_chunk(chunk)
+        local write_ok, write_err = archive_file:write(chunk)
+        if not write_ok then
+            return false, write_err
+        end
+        archive_offset = archive_offset + #chunk
+        return true
+    end
+
+    for _, entry in ipairs(entries) do
+        local zip_name = entry.zip_path
+        local dos_time, dos_date = to_zip_dos_datetime(entry.modified)
+        local local_header_offset = archive_offset
+        local is_directory = entry.kind == "directory"
+        local flags = is_directory and zip_utf8_flag or (zip_utf8_flag + zip_data_descriptor_flag)
+
+        local local_header = table.concat({
+            pack_uint32_le(0x04034B50),
+            pack_uint16_le(20),
+            pack_uint16_le(flags),
+            pack_uint16_le(zip_store_method),
+            pack_uint16_le(dos_time),
+            pack_uint16_le(dos_date),
+            pack_uint32_le(0),
+            pack_uint32_le(0),
+            pack_uint32_le(0),
+            pack_uint16_le(#zip_name),
+            pack_uint16_le(0),
+            zip_name,
+        })
+        local header_ok, header_err = write_archive_chunk(local_header)
+        if not header_ok then
+            return false, "Cannot write ZIP header: " .. tostring(header_err)
+        end
+
+        local crc32 = 0
+        local uncompressed_size = 0
+
+        if not is_directory then
+            local source_file, source_err = io.open(entry.full_path, "rb")
+            if not source_file then
+                return false, "Cannot read source file: " .. tostring(source_err)
+            end
+
+            crc32 = 0xFFFFFFFF
+            while true do
+                local chunk, read_err = source_file:read(chunk_size)
+                if read_err then
+                    source_file:close()
+                    return false, "Cannot read source file: " .. tostring(read_err)
+                end
+                if not chunk then
+                    break
+                end
+
+                uncompressed_size = uncompressed_size + #chunk
+                crc32 = update_crc32(crc32, chunk)
+
+                local chunk_ok, chunk_err = write_archive_chunk(chunk)
+                if not chunk_ok then
+                    source_file:close()
+                    return false, "Cannot write ZIP data: " .. tostring(chunk_err)
+                end
+            end
+
+            source_file:close()
+            crc32 = bxor_uint32(crc32, 0xFFFFFFFF)
+
+            local descriptor_ok, descriptor_err = write_archive_chunk(table.concat({
+                pack_uint32_le(0x08074B50),
+                pack_uint32_le(crc32),
+                pack_uint32_le(uncompressed_size),
+                pack_uint32_le(uncompressed_size),
+            }))
+            if not descriptor_ok then
+                return false, "Cannot finalize ZIP entry: " .. tostring(descriptor_err)
+            end
+        end
+
+        table.insert(central_records, {
+            zip_name = zip_name,
+            flags = flags,
+            method = zip_store_method,
+            dos_time = dos_time,
+            dos_date = dos_date,
+            crc32 = crc32,
+            compressed_size = uncompressed_size,
+            uncompressed_size = uncompressed_size,
+            external_attributes = is_directory and 0x10 or 0,
+            local_header_offset = local_header_offset,
+        })
+    end
+
+    local central_directory_offset = archive_offset
+
+    for _, record in ipairs(central_records) do
+        local central_header_ok, central_header_err = write_archive_chunk(table.concat({
+            pack_uint32_le(0x02014B50),
+            pack_uint16_le(20),
+            pack_uint16_le(20),
+            pack_uint16_le(record.flags),
+            pack_uint16_le(record.method),
+            pack_uint16_le(record.dos_time),
+            pack_uint16_le(record.dos_date),
+            pack_uint32_le(record.crc32),
+            pack_uint32_le(record.compressed_size),
+            pack_uint32_le(record.uncompressed_size),
+            pack_uint16_le(#record.zip_name),
+            pack_uint16_le(0),
+            pack_uint16_le(0),
+            pack_uint16_le(0),
+            pack_uint16_le(0),
+            pack_uint32_le(record.external_attributes),
+            pack_uint32_le(record.local_header_offset),
+            record.zip_name,
+        }))
+        if not central_header_ok then
+            return false, "Cannot write ZIP directory: " .. tostring(central_header_err)
+        end
+    end
+
+    local central_directory_size = archive_offset - central_directory_offset
+    local end_record_ok, end_record_err = write_archive_chunk(table.concat({
+        pack_uint32_le(0x06054B50),
+        pack_uint16_le(0),
+        pack_uint16_le(0),
+        pack_uint16_le(#central_records),
+        pack_uint16_le(#central_records),
+        pack_uint32_le(central_directory_size),
+        pack_uint32_le(central_directory_offset),
+        pack_uint16_le(0),
+    }))
+    if not end_record_ok then
+        return false, "Cannot finalize ZIP archive: " .. tostring(end_record_err)
+    end
+
+    return true
+end
+
+function FileOps:_createZipArchive(source_path, archive_path)
+    local archive_root_name = source_path:match("([^/]+)$") or "download"
+    local entries = {}
+    local collect_ok, collect_err = self:_collectZipEntries(source_path, archive_root_name, entries)
+    if not collect_ok then
+        return false, collect_err
+    end
+
+    local archive_file, archive_err = io.open(archive_path, "wb")
+    if not archive_file then
+        return false, "Cannot create ZIP archive: " .. tostring(archive_err)
+    end
+
+    local write_ok, write_err = self:_writeZipEntries(archive_file, entries)
+    local close_ok, close_err = archive_file:close()
+    if not write_ok then
+        os.remove(archive_path)
+        return false, write_err
+    end
+    if close_ok == false then
+        os.remove(archive_path)
+        return false, "Cannot finalize ZIP archive: " .. tostring(close_err)
+    end
+
+    return true
+end
+
+function FileOps:_createDirectoryArchive(full_path, safe_mode, scope_root)
+    if full_path == (scope_root or self._root_dir) then
+        return nil, nil, nil, "Cannot download root directory", 403
+    end
+
+    local entry_name = full_path:match("([^/]+)$") or "download"
+    local temp_root = string.format("/tmp/filesync-download-%d-%d", os.time(), math.random(10000, 99999))
+
+    local mkdir_ok, mkdir_err = self:_runShellCommand("mkdir -p " .. self:_shellEscape(temp_root) .. " 2>/dev/null")
+    if not mkdir_ok then
+        return nil, nil, nil, "Cannot prepare temporary archive directory: " .. tostring(mkdir_err)
+    end
+
+    local archive_name = entry_name .. ".zip"
+    local archive_path = temp_root .. "/" .. archive_name
+    local zip_source_path = full_path
+
+    if safe_mode then
+        local stage_root = temp_root .. "/stage"
+        local stage_entry = stage_root .. "/" .. entry_name
+        local stage_ok, stage_err = self:_runShellCommand("mkdir -p " .. self:_shellEscape(stage_root) .. " 2>/dev/null")
+        if not stage_ok then
+            self:_removeTempPath(temp_root)
+            return nil, nil, nil, "Cannot prepare temporary archive staging area: " .. tostring(stage_err)
+        end
+
+        local copy_ok, copy_err = self:_copySafeDownloadTree(full_path, stage_entry)
+        if not copy_ok then
+            self:_removeTempPath(temp_root)
+            return nil, nil, nil, copy_err
+        end
+
+        zip_source_path = stage_entry
+    end
+
+    local zip_ok, zip_err = self:_createZipArchive(zip_source_path, archive_path)
+    if zip_ok then
+        logger.info("FileSync: Created zip download archive", archive_path, "for", full_path)
+        return archive_path, archive_name, temp_root, nil, nil, "application/zip"
+    end
+
+    logger.warn("FileSync: Failed to create ZIP archive", full_path, zip_err)
+    self:_removeTempPath(temp_root)
+    return nil, nil, nil, "Cannot create ZIP archive"
+end
+
+--- Download a file, sending it directly to the client socket
+--- When inline is true, serve with Content-Disposition: inline (for image previews)
+function FileOps:downloadFile(client, rel_path, server, inline, options)
+    options = options or {}
+    local safe_mode = options.safe_mode == true
+    local full_path, err, scope = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = not safe_mode,
+    })
+    if not full_path then
+        return false, err, 400
+    end
+
+    local attr = lfs.attributes(full_path)
+    if not attr then
+        return false, "Source does not exist", 400
+    end
+
+    local filename = full_path:match("([^/]+)$") or "download"
+    if attr.mode == "file" then
+        if safe_mode and not self:isExtensionSafe(filename) then
+            return false, "Access denied: file type not allowed in safe mode", 403
+        end
+        return self:_streamDownload(client, full_path, server, inline, filename)
+    end
+
+    if attr.mode == "directory" then
+        local archive_path, archive_name, cleanup_path, archive_err, status_code, archive_mime =
+            self:_createDirectoryArchive(full_path, safe_mode, scope.root_path)
+        if not archive_path then
+            return false, archive_err, status_code or 400
+        end
+        return self:_streamDownload(client, archive_path, server, false, archive_name, archive_mime or "application/zip", cleanup_path)
+    end
+
+    return false, "Unsupported entry type", 400
+end
+
+function FileOps:_normalizeUploadRelativePath(relative_path, fallback_filename)
+    local normalized = tostring(relative_path or fallback_filename or "")
+    normalized = normalized:gsub("\\", "/")
+    normalized = normalized:gsub("//+", "/")
+    normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+    normalized = normalized:gsub("^/+", ""):gsub("/+$", "")
+
+    if normalized == "" then
+        return nil, "Empty upload path"
+    end
+
+    if normalized:match("%.%.") then
+        return nil, "Path traversal not allowed"
+    end
+
+    local segments = {}
+    for segment in normalized:gmatch("[^/]+") do
+        local valid, valid_err = self:_validateFilename(segment)
+        if not valid then
+            return nil, valid_err
+        end
+        table.insert(segments, segment)
+    end
+
+    if #segments == 0 then
+        return nil, "Empty upload path"
+    end
+
+    if fallback_filename then
+        segments[#segments] = fallback_filename
+    end
+
+    return table.concat(segments, "/")
+end
+
+function FileOps:_collectUploadDirectories(full_dir_path, pending_dirs, scope_root)
+    scope_root = normalize_root_path(scope_root or self._root_dir)
+
+    if not full_dir_path or full_dir_path == "" or full_dir_path == scope_root then
+        return true
+    end
+
+    if not is_path_within_root(full_dir_path, scope_root) then
+        return false, "Access denied: path outside root directory"
+    end
+
+    local rel = full_dir_path:sub(#scope_root + 1):gsub("^/+", "")
+    if rel == "" then
+        return true
+    end
+
+    local current = scope_root
+    for segment in rel:gmatch("[^/]+") do
+        local valid, valid_err = self:_validateFilename(segment)
+        if not valid then
+            return false, valid_err
+        end
+
+        current = current .. "/" .. segment
+        local attr = lfs.attributes(current)
+        if attr then
+            if attr.mode ~= "directory" then
+                return false, "Cannot create directory: path component is not a directory"
+            end
+        else
+            pending_dirs[current] = true
+        end
+    end
+
+    return true
+end
+
+function FileOps:_createPendingDirectories(pending_dirs)
+    local paths = {}
+    for path in pairs(pending_dirs) do
+        table.insert(paths, path)
+    end
+
+    table.sort(paths, function(a, b)
+        return #a < #b
+    end)
+
+    for _, path in ipairs(paths) do
+        local attr = lfs.attributes(path)
+        if attr then
+            if attr.mode ~= "directory" then
+                return false, "Cannot create directory: path component is not a directory"
+            end
+        else
+            local ok, mkdir_err = lfs.mkdir(path)
+            if not ok then
+                return false, "Cannot create directory: " .. tostring(mkdir_err)
+            end
+        end
+    end
+
     return true
 end
 
 --- Handle multipart file upload
-function FileOps:handleUpload(rel_dir, body, boundary)
-    local dir_path, err = self:_resolvePath(rel_dir)
+function FileOps:handleUpload(rel_dir, body, boundary, options)
+    options = options or {}
+    local dir_path, err, scope = self:_resolvePath(rel_dir, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not dir_path then
         return false, err
     end
@@ -406,57 +1180,184 @@ function FileOps:handleUpload(rel_dir, body, boundary)
         search_start = next_boundary
     end
 
-    local uploaded_count = 0
+    local form_fields = {}
+    local upload_entries = {}
     for _, part in ipairs(parts) do
-        -- Split headers from body
         local header_end = part:find("\r\n\r\n", 1, true)
         if header_end then
             local headers_str = part:sub(1, header_end - 1)
             local file_data = part:sub(header_end + 4)
+            local field_name = headers_str:match('name="([^"]+)"')
 
-            -- Extract filename from Content-Disposition
             local filename = headers_str:match('filename="([^"]+)"')
             if filename and filename ~= "" then
-                -- Clean up filename (remove path components from some browsers)
                 filename = filename:match("([^/\\]+)$") or filename
 
-                -- Fix iOS Safari appending .zip to EPUB/CBZ files (they are ZIP-based)
                 if filename:match("%.epub%.zip$") then
                     filename = filename:gsub("%.zip$", "")
                 elseif filename:match("%.cbz%.zip$") then
                     filename = filename:gsub("%.zip$", "")
                 end
 
-                -- Validate filename
                 local valid, valid_err = self:_validateFilename(filename)
                 if valid then
-                    local file_path = dir_path .. "/" .. filename
-                    local f = io.open(file_path, "wb")
-                    if f then
-                        f:write(file_data)
-                        f:close()
-                        uploaded_count = uploaded_count + 1
-                        logger.info("FileSync: Uploaded", filename, "to", dir_path)
-                    else
-                        logger.warn("FileSync: Cannot write file", file_path)
+                    if options.safe_mode and not self:isExtensionSafe(filename) then
+                        return false, "Root mode required for this file type"
                     end
+                    table.insert(upload_entries, {
+                        filename = filename,
+                        data = file_data,
+                    })
                 else
                     logger.warn("FileSync: Invalid filename:", filename, valid_err)
                 end
+            elseif field_name and field_name ~= "" then
+                form_fields[field_name] = file_data:gsub("\r\n$", "")
             end
         end
     end
 
-    if uploaded_count > 0 then
-        return true
-    else
+    if #upload_entries == 0 then
         return false, "No files were uploaded"
     end
+
+    local conflict_strategy = self:_normalizeConflictStrategy(form_fields.conflict_strategy or options.conflict_strategy)
+
+    local normalized_rel_dir = tostring(rel_dir or "/"):gsub("//+", "/"):gsub("^%s+", ""):gsub("%s+$", "")
+    if normalized_rel_dir == "" then
+        normalized_rel_dir = "/"
+    end
+    if normalized_rel_dir:sub(1, 1) ~= "/" then
+        normalized_rel_dir = "/" .. normalized_rel_dir
+    end
+    if normalized_rel_dir ~= "/" and normalized_rel_dir:sub(-1) == "/" then
+        normalized_rel_dir = normalized_rel_dir:sub(1, -2)
+    end
+
+    local pending_dirs = {}
+    local planned_targets = {}
+    local prepared_entries = {}
+    for _, entry in ipairs(upload_entries) do
+        local upload_rel_path, path_err = self:_normalizeUploadRelativePath(form_fields.relative_path, entry.filename)
+        if not upload_rel_path then
+            return false, path_err
+        end
+
+        local target_rel_path = normalized_rel_dir == "/"
+            and ("/" .. upload_rel_path)
+            or (normalized_rel_dir .. "/" .. upload_rel_path)
+        local target_full_path, target_err = self:_resolvePath(target_rel_path, {
+            scope = options.scope,
+            allow_root_scopes = options.allow_root_scopes == true,
+        })
+        if not target_full_path then
+            return false, target_err
+        end
+
+        local target_attr = lfs.attributes(target_full_path)
+        if target_attr and conflict_strategy == "error" then
+            return false, "Destination already exists", self:_buildDestinationConflict(
+                { mode = "file" },
+                target_attr,
+                target_full_path,
+                scope.id,
+                {
+                    destination_path = target_rel_path,
+                    source_type = "file",
+                }
+            )
+        end
+
+        if planned_targets[target_full_path] then
+            return false, "Destination already exists", self:_buildDestinationConflict(
+                { mode = "file" },
+                { mode = "file" },
+                target_full_path,
+                scope.id,
+                {
+                    destination_path = target_rel_path,
+                    source_type = "file",
+                    destination_type = "file",
+                }
+            )
+        end
+
+        local parent_dir = target_full_path:match("(.+)/[^/]+$") or dir_path
+        local ok_dirs, dir_err = self:_collectUploadDirectories(parent_dir, pending_dirs, scope.root_path)
+        if not ok_dirs then
+            return false, dir_err
+        end
+
+        planned_targets[target_full_path] = true
+
+        table.insert(prepared_entries, {
+            full_path = target_full_path,
+            relative_path = upload_rel_path,
+            data = entry.data,
+        })
+    end
+
+    local ok_dirs, dir_err = self:_createPendingDirectories(pending_dirs)
+    if not ok_dirs then
+        return false, dir_err
+    end
+
+    local uploaded_count = 0
+    for _, entry in ipairs(prepared_entries) do
+        local temp_path = string.format("%s.filesync-upload-%d.tmp", entry.full_path, os.time())
+        local f = io.open(temp_path, "wb")
+        if f then
+            local write_ok, write_err = f:write(entry.data)
+            local close_ok, close_err = f:close()
+            if write_ok and close_ok ~= false then
+                local can_finalize = true
+                local target_attr = lfs.attributes(entry.full_path)
+                if target_attr then
+                    local remove_ok, remove_err = self:_removeResolvedPath(entry.full_path)
+                    if not remove_ok then
+                        os.remove(temp_path)
+                        logger.warn("FileSync: Cannot replace existing destination", entry.full_path, remove_err)
+                        can_finalize = false
+                    end
+                end
+
+                if can_finalize then
+                    local rename_ok, rename_err = os.rename(temp_path, entry.full_path)
+                    if rename_ok then
+                        uploaded_count = uploaded_count + 1
+                        logger.info("FileSync: Uploaded", entry.relative_path, "to", dir_path)
+                    else
+                        os.remove(temp_path)
+                        logger.warn("FileSync: Cannot finalize upload", entry.full_path, rename_err)
+                    end
+                end
+            else
+                os.remove(temp_path)
+                logger.warn("FileSync: Cannot write upload temp file", temp_path, write_err or close_err)
+            end
+        else
+            logger.warn("FileSync: Cannot write file", temp_path)
+        end
+    end
+
+    if uploaded_count == #prepared_entries then
+        return true
+    end
+
+    if uploaded_count > 0 then
+        return false, "Some files could not be uploaded"
+    end
+
+    return false, "No files were uploaded"
 end
 
 --- Create a directory
-function FileOps:createDirectory(rel_path)
-    local full_path, err = self:_resolvePath(rel_path)
+function FileOps:createDirectory(rel_path, options)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return false, err
     end
@@ -493,13 +1394,22 @@ function FileOps:createDirectory(rel_path)
 end
 
 --- Rename a file or directory
-function FileOps:rename(old_rel_path, new_rel_path)
-    local old_path, err1 = self:_resolvePath(old_rel_path)
+function FileOps:rename(old_rel_path, new_rel_path, options)
+    options = options or {}
+    local allow_root_scopes = options.allow_root_scopes == true
+    local scope = options.scope
+    local old_path, err1 = self:_resolvePath(old_rel_path, {
+        scope = scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not old_path then
         return false, err1
     end
 
-    local new_path, err2 = self:_resolvePath(new_rel_path)
+    local new_path, err2 = self:_resolvePath(new_rel_path, {
+        scope = scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not new_path then
         return false, err2
     end
@@ -532,19 +1442,240 @@ function FileOps:rename(old_rel_path, new_rel_path)
     return true
 end
 
+function FileOps:_validateDestinationPath(full_path)
+    local parent = full_path:match("(.+)/[^/]+$")
+    if parent then
+        local parent_attr = lfs.attributes(parent)
+        if not parent_attr or parent_attr.mode ~= "directory" then
+            return false, "Parent directory does not exist"
+        end
+    end
+
+    local name = full_path:match("([^/]+)$")
+    local valid, valid_err = self:_validateFilename(name)
+    if not valid then
+        return false, valid_err
+    end
+
+    return true
+end
+
+function FileOps:_isPathInside(parent_path, child_path)
+    return child_path:sub(1, #parent_path + 1) == parent_path .. "/"
+end
+
+function FileOps:_normalizeConflictStrategy(strategy)
+    if strategy == "replace" or strategy == "merge_replace" then
+        return strategy
+    end
+    return "error"
+end
+
+function FileOps:_describeEntryType(attr)
+    if not attr then
+        return nil
+    end
+    return attr.mode == "directory" and "directory" or "file"
+end
+
+function FileOps:_buildDestinationConflict(src_attr, dest_attr, dest_path, scope_id, extra)
+    local details = extra or {}
+    details.code = "destination_exists"
+    details.source_type = details.source_type or self:_describeEntryType(src_attr)
+    details.destination_type = details.destination_type or self:_describeEntryType(dest_attr)
+    details.can_merge = details.can_merge == true
+        or (details.source_type == "directory" and details.destination_type == "directory")
+    if dest_path and scope_id and not details.destination_path then
+        details.destination_path = self:_getRelativePath(dest_path, scope_id)
+    end
+    return details
+end
+
+function FileOps:_removeResolvedPath(full_path)
+    local attr = lfs.attributes(full_path)
+    if not attr then
+        return true
+    end
+
+    if attr.mode == "directory" then
+        local ok, err = self:_deleteRecursive(full_path)
+        if not ok then
+            return false, "Cannot delete existing destination: " .. tostring(err)
+        end
+        return true
+    end
+
+    local ok, err = os.remove(full_path)
+    if not ok then
+        return false, "Cannot delete existing destination: " .. tostring(err)
+    end
+    return true
+end
+
+--- Move a file or directory
+function FileOps:move(old_rel_path, new_rel_path, options)
+    options = options or {}
+    local allow_root_scopes = options.allow_root_scopes == true
+    local old_path, err1 = self:_resolvePath(old_rel_path, {
+        scope = options.old_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
+    if not old_path then
+        return false, err1
+    end
+
+    local new_path, err2 = self:_resolvePath(new_rel_path, {
+        scope = options.new_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
+    if not new_path then
+        return false, err2
+    end
+
+    if old_path == self._root_dir or old_path == "/" then
+        return false, "Cannot move root directory"
+    end
+
+    local src_attr = lfs.attributes(old_path)
+    if not src_attr then
+        return false, "Source does not exist"
+    end
+
+    local dest_attr = lfs.attributes(new_path)
+    if dest_attr then
+        return false, "Destination already exists"
+    end
+
+    local valid, valid_err = self:_validateDestinationPath(new_path)
+    if not valid then
+        return false, valid_err
+    end
+
+    if src_attr.mode == "directory" and self:_isPathInside(old_path, new_path) then
+        return false, "Cannot move directory inside itself"
+    end
+
+    local ok, move_err = os.rename(old_path, new_path)
+    if not ok then
+        if src_attr.mode == "file" then
+            local copied, copy_err = self:copyFile(old_rel_path, new_rel_path, {
+                old_scope = options.old_scope or options.scope,
+                new_scope = options.new_scope or options.scope,
+                allow_root_scopes = allow_root_scopes,
+            })
+            if not copied then
+                return false, copy_err
+            end
+            local removed, remove_err = os.remove(old_path)
+            if not removed then
+                return false, "Cannot remove source after copy: " .. tostring(remove_err)
+            end
+            logger.info("FileSync: Moved", old_path, "to", new_path, "using copy fallback")
+            return true
+        end
+        return false, "Cannot move: " .. tostring(move_err)
+    end
+
+    logger.info("FileSync: Moved", old_path, "to", new_path)
+    return true
+end
+
+--- Copy a file in chunks without loading it entirely into memory
+function FileOps:copyFile(src_rel_path, dst_rel_path, options)
+    options = options or {}
+    local allow_root_scopes = options.allow_root_scopes == true
+    local src_path, err1 = self:_resolvePath(src_rel_path, {
+        scope = options.old_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
+    if not src_path then
+        return false, err1
+    end
+
+    local dst_path, err2 = self:_resolvePath(dst_rel_path, {
+        scope = options.new_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
+    if not dst_path then
+        return false, err2
+    end
+
+    local src_attr = lfs.attributes(src_path)
+    if not src_attr then
+        return false, "Source does not exist"
+    end
+    if src_attr.mode ~= "file" then
+        return false, "Copy only supports files"
+    end
+
+    local dest_attr = lfs.attributes(dst_path)
+    if dest_attr then
+        return false, "Destination already exists"
+    end
+
+    local valid, valid_err = self:_validateDestinationPath(dst_path)
+    if not valid then
+        return false, valid_err
+    end
+
+    local src_file, src_err = io.open(src_path, "rb")
+    if not src_file then
+        return false, "Cannot open source file: " .. tostring(src_err)
+    end
+
+    local dst_file, dst_err = io.open(dst_path, "wb")
+    if not dst_file then
+        src_file:close()
+        return false, "Cannot create destination file: " .. tostring(dst_err)
+    end
+
+    local CHUNK_SIZE = 65536
+    while true do
+        local chunk, read_err = src_file:read(CHUNK_SIZE)
+        if read_err then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot read source file: " .. tostring(read_err)
+        end
+        if not chunk then break end
+        local write_ok, write_err = dst_file:write(chunk)
+        if not write_ok then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot write destination file: " .. tostring(write_err)
+        end
+    end
+
+    local close_ok, close_err = dst_file:close()
+    src_file:close()
+    if close_ok == false then
+        os.remove(dst_path)
+        return false, "Cannot finalize destination file: " .. tostring(close_err)
+    end
+
+    logger.info("FileSync: Copied", src_path, "to", dst_path)
+    return true
+end
+
 --- Delete a file or directory (directory must be empty)
 --- @param rel_path string: relative path to delete
 --- @param options table|nil: optional settings
 ---   - safe_mode (bool): when true, auto-delete associated .sdr directory for book files
 ---   - delete_sdr (bool): when true (and not safe_mode), delete associated .sdr directory
 function FileOps:delete(rel_path, options)
-    local full_path, err = self:_resolvePath(rel_path)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return false, err
     end
 
     -- Prevent deleting the root directory
-    if full_path == self._root_dir then
+    if full_path == self._root_dir or full_path == "/" then
         return false, "Cannot delete root directory"
     end
 
@@ -553,10 +1684,10 @@ function FileOps:delete(rel_path, options)
         return false, "Path does not exist"
     end
 
+    options = options or {}
     local is_file = attr.mode ~= "directory"
 
     if attr.mode == "directory" then
-        -- Only allow deletion of empty directories (safety measure)
         local child_count = 0
         for child_name in lfs.dir(full_path) do
             if child_name ~= "." and child_name ~= ".." then
@@ -564,12 +1695,19 @@ function FileOps:delete(rel_path, options)
                 break
             end
         end
-        if child_count > 0 then
-            return false, "Cannot delete non-empty directory"
-        end
-        local ok, del_err = lfs.rmdir(full_path)
-        if not ok then
-            return false, "Cannot delete directory: " .. tostring(del_err)
+
+        if child_count == 0 then
+            local ok, del_err = lfs.rmdir(full_path)
+            if not ok then
+                return false, "Cannot delete directory: " .. tostring(del_err)
+            end
+        elseif options.recursive == true then
+            local ok, del_err = self:_deleteRecursive(full_path)
+            if not ok then
+                return false, "Cannot delete directory: " .. tostring(del_err)
+            end
+        else
+            return false, "Cannot delete non-empty directory without recursive flag"
         end
     else
         local ok, del_err = os.remove(full_path)
@@ -1013,9 +2151,13 @@ function FileOps:_epubHasCover(full_path)
     return ok and has
 end
 
---- Get metadata for a file
-function FileOps:getMetadata(rel_path)
-    local full_path, err = self:_resolvePath(rel_path)
+--- Get metadata for a file.
+function FileOps:getMetadata(rel_path, options)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return nil, err
     end
@@ -1166,9 +2308,13 @@ function FileOps:getMetadata(rel_path)
     return result
 end
 
---- Extract and stream cover image from an ebook file (EPUB, MOBI, AZW3)
-function FileOps:getBookCover(client, rel_path, server)
-    local full_path, err = self:_resolvePath(rel_path)
+--- Extract and stream cover image from an ebook file (EPUB, MOBI, AZW3).
+function FileOps:getBookCover(client, rel_path, server, options)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return false, err
     end

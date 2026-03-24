@@ -45,7 +45,8 @@ msgstr ""
 msgid "Port set to %1. Restart the server for changes to take effect."
 msgstr ""
 
-msgid "Invalid port. Please enter a number between 1024 and 65535."
+msgid "Invalid port. Please enter 80 or a number between 1024 and 65535."
+msgstr "Invalid port. Please enter 80 or a number between 1024 and 65535."
 msgstr ""
 
 msgid "FileSync server is already running."
@@ -58,6 +59,15 @@ msgid "Could not determine device IP address. Make sure WiFi is connected."
 msgstr ""
 
 msgid "Failed to start server: %1"
+msgstr ""
+
+msgid "FileSync could not use the default address %1 because another service is already using port %2.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."
+msgstr ""
+
+msgid "Failed to start server on port %1.\n\nAnother service is already using this port.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."
+msgstr ""
+
+msgid "Failed to start server on port %1.\n\nThis port may require root or admin privileges on this device.\n\nTry changing the Server Port setting to 8080 or higher."
 msgstr ""
 
 msgid "FileSync server stopped."
@@ -82,6 +92,9 @@ msgid "Stop Server"
 msgstr ""
 
 msgid "Server running in the background. Stop the server to save battery."
+msgstr ""
+
+msgid "Failed to open QR screen:\n%1"
 msgstr ""
 
 msgid "Image preview"

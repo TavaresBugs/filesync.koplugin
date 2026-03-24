@@ -32,8 +32,32 @@ local MOBI_EXTENSIONS = {
     mobi = true, azw = true, azw3 = true, prc = true, pdb = true,
 }
 
+local function normalize_root_path(path)
+    local normalized = tostring(path or "/")
+    normalized = normalized:gsub("//+", "/"):gsub("^%s+", ""):gsub("%s+$", "")
+    if normalized == "" then
+        normalized = "/"
+    end
+    if normalized ~= "/" and normalized:sub(-1) == "/" then
+        normalized = normalized:sub(1, -2)
+    end
+    if normalized:sub(1, 1) ~= "/" then
+        normalized = "/" .. normalized
+    end
+    return normalized
+end
+
+local function is_path_within_root(full_path, root_path)
+    if root_path == "/" then
+        return full_path:sub(1, 1) == "/"
+    end
+    return full_path == root_path or full_path:sub(1, #root_path + 1) == root_path .. "/"
+end
+
 local FileOps = {
     _root_dir = "/mnt/us",
+    _default_scope_id = "storage",
+    _scope_configs = nil,
 }
 
 local function command_succeeded(ok, why, code)
@@ -50,14 +74,85 @@ local function command_succeeded(ok, why, code)
 end
 
 function FileOps:setRootDir(dir)
-    self._root_dir = dir
+    self._root_dir = normalize_root_path(dir)
+    self:_rebuildScopeConfigs()
+end
+
+function FileOps:_rebuildScopeConfigs()
+    local storage_root = normalize_root_path(self._root_dir)
+    self._scope_configs = {
+        storage = {
+            id = "storage",
+            root_path = storage_root,
+            root_only = false,
+        },
+    }
+
+    if storage_root ~= "/" then
+        self._scope_configs.system = {
+            id = "system",
+            root_path = "/",
+            root_only = true,
+        }
+    end
+end
+
+function FileOps:_ensureScopeConfigs()
+    if not self._scope_configs then
+        self:_rebuildScopeConfigs()
+    end
+end
+
+function FileOps:getDefaultScopeId()
+    return self._default_scope_id
+end
+
+function FileOps:getNavigationScopes(allow_root_scopes)
+    self:_ensureScopeConfigs()
+
+    local scopes = {}
+    local ordered_scope_ids = { self._default_scope_id, "system" }
+    for _, scope_id in ipairs(ordered_scope_ids) do
+        local scope = self._scope_configs[scope_id]
+        if scope and (not scope.root_only or allow_root_scopes) then
+            table.insert(scopes, {
+                id = scope.id,
+                root_path = scope.root_path,
+            })
+        end
+    end
+
+    return scopes
+end
+
+function FileOps:_getScopeConfig(scope_id, options)
+    self:_ensureScopeConfigs()
+    options = options or {}
+
+    local resolved_scope_id = scope_id or self._default_scope_id
+    local scope = self._scope_configs[resolved_scope_id]
+    if not scope then
+        return nil, "Unknown filesystem scope"
+    end
+
+    if scope.root_only and not options.allow_root_scopes then
+        return nil, "Scope not available in current mode"
+    end
+
+    return scope
 end
 
 --- Resolve and validate a path, preventing path traversal.
 --- Returns the full absolute path, or nil and an error message.
-function FileOps:_resolvePath(rel_path)
+function FileOps:_resolvePath(rel_path, options)
+    options = options or {}
     if not rel_path or rel_path == "" then
         rel_path = "/"
+    end
+
+    local scope, scope_err = self:_getScopeConfig(options.scope, options)
+    if not scope then
+        return nil, scope_err
     end
 
     -- Normalize: remove double slashes, trim whitespace
@@ -73,7 +168,7 @@ function FileOps:_resolvePath(rel_path)
         rel_path = "/" .. rel_path
     end
 
-    local full_path = self._root_dir .. rel_path
+    local full_path = scope.root_path .. rel_path
 
     -- Normalize again after combining
     full_path = full_path:gsub("//+", "/")
@@ -83,12 +178,12 @@ function FileOps:_resolvePath(rel_path)
         full_path = full_path:sub(1, -2)
     end
 
-    -- Verify the resolved path is under root_dir
-    if full_path:sub(1, #self._root_dir) ~= self._root_dir then
+    -- Verify the resolved path is under the selected root
+    if not is_path_within_root(full_path, scope.root_path) then
         return nil, "Access denied: path outside root directory"
     end
 
-    return full_path
+    return full_path, nil, scope
 end
 
 --- Validate a filename (no slashes, no dots-only, no null bytes)
@@ -108,13 +203,25 @@ function FileOps:_validateFilename(name)
     return true
 end
 
---- Get the relative path from root_dir
-function FileOps:_getRelativePath(full_path)
-    if full_path:sub(1, #self._root_dir) == self._root_dir then
-        local rel = full_path:sub(#self._root_dir + 1)
-        if rel == "" then rel = "/" end
+--- Get the relative path from the selected scope root.
+function FileOps:_getRelativePath(full_path, scope_id)
+    self:_ensureScopeConfigs()
+
+    local scope = self._scope_configs[scope_id or self._default_scope_id]
+    local root_path = scope and scope.root_path or self._root_dir
+
+    if root_path == "/" then
+        return full_path == "" and "/" or full_path
+    end
+
+    if is_path_within_root(full_path, root_path) then
+        local rel = full_path:sub(#root_path + 1)
+        if rel == "" then
+            rel = "/"
+        end
         return rel
     end
+
     return full_path
 end
 
@@ -206,9 +313,15 @@ function FileOps:isExtensionSafe(filename)
     return SAFE_MODE_EXTENSIONS[ext:lower()] == true
 end
 
---- List directory contents
-function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
-    local full_path, err = self:_resolvePath(rel_path)
+--- List directory contents.
+function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, options)
+    options = options or {}
+    local safe_mode = options.safe_mode == true
+    local include_hidden = options.include_hidden == true and not safe_mode
+    local full_path, err, scope = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = not safe_mode,
+    })
     if not full_path then
         return nil, err
     end
@@ -222,9 +335,8 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
     local ok, iter_err = pcall(function()
         for name in lfs.dir(full_path) do
             if name ~= "." and name ~= ".." then
-                -- Skip hidden files starting with .
-                if name:sub(1, 1) ~= "." then
-                    -- Apply filter if present
+                local is_hidden = name:sub(1, 1) == "."
+                if not is_hidden or include_hidden then
                     local include = true
                     if filter and filter ~= "" then
                         include = name:lower():find(filter:lower(), 1, true) ~= nil
@@ -235,33 +347,31 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
                         local entry_attr = lfs.attributes(entry_path)
                         if entry_attr then
                             local is_dir = entry_attr.mode == "directory"
-                            -- Apply safe mode filter: only dirs and whitelisted extensions
                             if safe_mode and not is_dir and not self:isExtensionSafe(name) then
-                                -- skip non-whitelisted file
+                                -- Skip non-whitelisted file.
                             elseif safe_mode and is_dir and name:match("%.sdr$") then
-                                -- skip .sdr metadata directories in safe mode
+                                -- Skip metadata directory in safe mode.
                             else
                                 local entry = {
                                     name = name,
-                                    path = self:_getRelativePath(entry_path),
+                                    path = self:_getRelativePath(entry_path, scope.id),
                                     is_dir = is_dir,
+                                    is_hidden = is_hidden,
                                     size = entry_attr.size or 0,
                                     size_formatted = self:_formatSize(entry_attr.size or 0),
                                     modified = entry_attr.modification or 0,
                                     type = is_dir and "directory" or self:_getFileType(name),
                                 }
-                                -- For directories, check if they are empty
                                 if is_dir then
                                     local child_count = 0
                                     for child_name in lfs.dir(entry_path) do
                                         if child_name ~= "." and child_name ~= ".." then
                                             child_count = child_count + 1
-                                            break -- only need to know if > 0
+                                            break
                                         end
                                     end
                                     entry.is_empty = (child_count == 0)
                                 end
-                                -- For non-directory files, check if a corresponding .sdr directory exists
                                 if not is_dir then
                                     local sdr_attr = lfs.attributes(entry_path .. ".sdr")
                                     if sdr_attr and sdr_attr.mode == "directory" then
@@ -328,7 +438,8 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
     end
 
     return {
-        path = rel_path or "/",
+        path = self:_getRelativePath(full_path, scope.id),
+        scope = scope.id,
         entries = entries,
         breadcrumbs = breadcrumbs,
         count = #entries,
@@ -486,8 +597,8 @@ function FileOps:_copySafeDownloadTree(src_path, dst_path)
     return false, "Unsupported entry type"
 end
 
-function FileOps:_createDirectoryArchive(full_path, safe_mode)
-    if full_path == self._root_dir then
+function FileOps:_createDirectoryArchive(full_path, safe_mode, scope_root)
+    if full_path == (scope_root or self._root_dir) then
         return nil, nil, nil, "Cannot download root directory", 403
     end
 
@@ -536,8 +647,13 @@ end
 
 --- Download a file, sending it directly to the client socket
 --- When inline is true, serve with Content-Disposition: inline (for image previews)
-function FileOps:downloadFile(client, rel_path, server, inline, safe_mode)
-    local full_path, err = self:_resolvePath(rel_path)
+function FileOps:downloadFile(client, rel_path, server, inline, options)
+    options = options or {}
+    local safe_mode = options.safe_mode == true
+    local full_path, err, scope = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = not safe_mode,
+    })
     if not full_path then
         return false, err, 400
     end
@@ -557,7 +673,7 @@ function FileOps:downloadFile(client, rel_path, server, inline, safe_mode)
 
     if attr.mode == "directory" then
         local archive_path, archive_name, cleanup_path, archive_err, status_code =
-            self:_createDirectoryArchive(full_path, safe_mode)
+            self:_createDirectoryArchive(full_path, safe_mode, scope.root_path)
         if not archive_path then
             return false, archive_err, status_code or 400
         end
@@ -568,8 +684,12 @@ function FileOps:downloadFile(client, rel_path, server, inline, safe_mode)
 end
 
 --- Handle multipart file upload
-function FileOps:handleUpload(rel_dir, body, boundary)
-    local dir_path, err = self:_resolvePath(rel_dir)
+function FileOps:handleUpload(rel_dir, body, boundary, options)
+    options = options or {}
+    local dir_path, err = self:_resolvePath(rel_dir, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not dir_path then
         return false, err
     end
@@ -651,8 +771,12 @@ function FileOps:handleUpload(rel_dir, body, boundary)
 end
 
 --- Create a directory
-function FileOps:createDirectory(rel_path)
-    local full_path, err = self:_resolvePath(rel_path)
+function FileOps:createDirectory(rel_path, options)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return false, err
     end
@@ -689,13 +813,22 @@ function FileOps:createDirectory(rel_path)
 end
 
 --- Rename a file or directory
-function FileOps:rename(old_rel_path, new_rel_path)
-    local old_path, err1 = self:_resolvePath(old_rel_path)
+function FileOps:rename(old_rel_path, new_rel_path, options)
+    options = options or {}
+    local allow_root_scopes = options.allow_root_scopes == true
+    local scope = options.scope
+    local old_path, err1 = self:_resolvePath(old_rel_path, {
+        scope = scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not old_path then
         return false, err1
     end
 
-    local new_path, err2 = self:_resolvePath(new_rel_path)
+    local new_path, err2 = self:_resolvePath(new_rel_path, {
+        scope = scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not new_path then
         return false, err2
     end
@@ -751,18 +884,26 @@ function FileOps:_isPathInside(parent_path, child_path)
 end
 
 --- Move a file or directory
-function FileOps:move(old_rel_path, new_rel_path)
-    local old_path, err1 = self:_resolvePath(old_rel_path)
+function FileOps:move(old_rel_path, new_rel_path, options)
+    options = options or {}
+    local allow_root_scopes = options.allow_root_scopes == true
+    local old_path, err1 = self:_resolvePath(old_rel_path, {
+        scope = options.old_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not old_path then
         return false, err1
     end
 
-    local new_path, err2 = self:_resolvePath(new_rel_path)
+    local new_path, err2 = self:_resolvePath(new_rel_path, {
+        scope = options.new_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not new_path then
         return false, err2
     end
 
-    if old_path == self._root_dir then
+    if old_path == self._root_dir or old_path == "/" then
         return false, "Cannot move root directory"
     end
 
@@ -787,6 +928,22 @@ function FileOps:move(old_rel_path, new_rel_path)
 
     local ok, move_err = os.rename(old_path, new_path)
     if not ok then
+        if src_attr.mode == "file" then
+            local copied, copy_err = self:copyFile(old_rel_path, new_rel_path, {
+                old_scope = options.old_scope or options.scope,
+                new_scope = options.new_scope or options.scope,
+                allow_root_scopes = allow_root_scopes,
+            })
+            if not copied then
+                return false, copy_err
+            end
+            local removed, remove_err = os.remove(old_path)
+            if not removed then
+                return false, "Cannot remove source after copy: " .. tostring(remove_err)
+            end
+            logger.info("FileSync: Moved", old_path, "to", new_path, "using copy fallback")
+            return true
+        end
         return false, "Cannot move: " .. tostring(move_err)
     end
 
@@ -795,13 +952,21 @@ function FileOps:move(old_rel_path, new_rel_path)
 end
 
 --- Copy a file in chunks without loading it entirely into memory
-function FileOps:copyFile(src_rel_path, dst_rel_path)
-    local src_path, err1 = self:_resolvePath(src_rel_path)
+function FileOps:copyFile(src_rel_path, dst_rel_path, options)
+    options = options or {}
+    local allow_root_scopes = options.allow_root_scopes == true
+    local src_path, err1 = self:_resolvePath(src_rel_path, {
+        scope = options.old_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not src_path then
         return false, err1
     end
 
-    local dst_path, err2 = self:_resolvePath(dst_rel_path)
+    local dst_path, err2 = self:_resolvePath(dst_rel_path, {
+        scope = options.new_scope or options.scope,
+        allow_root_scopes = allow_root_scopes,
+    })
     if not dst_path then
         return false, err2
     end
@@ -871,13 +1036,17 @@ end
 ---   - safe_mode (bool): when true, auto-delete associated .sdr directory for book files
 ---   - delete_sdr (bool): when true (and not safe_mode), delete associated .sdr directory
 function FileOps:delete(rel_path, options)
-    local full_path, err = self:_resolvePath(rel_path)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return false, err
     end
 
     -- Prevent deleting the root directory
-    if full_path == self._root_dir then
+    if full_path == self._root_dir or full_path == "/" then
         return false, "Cannot delete root directory"
     end
 
@@ -1353,9 +1522,13 @@ function FileOps:_epubHasCover(full_path)
     return ok and has
 end
 
---- Get metadata for a file
-function FileOps:getMetadata(rel_path)
-    local full_path, err = self:_resolvePath(rel_path)
+--- Get metadata for a file.
+function FileOps:getMetadata(rel_path, options)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return nil, err
     end
@@ -1506,9 +1679,13 @@ function FileOps:getMetadata(rel_path)
     return result
 end
 
---- Extract and stream cover image from an ebook file (EPUB, MOBI, AZW3)
-function FileOps:getBookCover(client, rel_path, server)
-    local full_path, err = self:_resolvePath(rel_path)
+--- Extract and stream cover image from an ebook file (EPUB, MOBI, AZW3).
+function FileOps:getBookCover(client, rel_path, server, options)
+    options = options or {}
+    local full_path, err = self:_resolvePath(rel_path, {
+        scope = options.scope,
+        allow_root_scopes = options.allow_root_scopes == true,
+    })
     if not full_path then
         return false, err
     end

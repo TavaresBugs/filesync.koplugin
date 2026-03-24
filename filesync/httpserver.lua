@@ -219,6 +219,7 @@ function HttpServer:_route(client, method, path, query, headers, body)
 
         if method == "GET" and path == "/api/metadata" then
             local file_path = query.path
+            local nav_context = self:_buildNavigationContext(query.scope, safe_mode, false)
             if not file_path then
                 self:_sendJSON(client, 400, {error = "Missing path parameter"})
                 return
@@ -231,7 +232,10 @@ function HttpServer:_route(client, method, path, query, headers, body)
                     return
                 end
             end
-            local result, err_msg = FileOps:getMetadata(file_path)
+            local result, err_msg = FileOps:getMetadata(file_path, {
+                scope = nav_context.scope,
+                allow_root_scopes = nav_context.allow_root_scopes,
+            })
             if result then
                 self:_sendJSON(client, 200, result)
             else
@@ -240,11 +244,15 @@ function HttpServer:_route(client, method, path, query, headers, body)
 
         elseif method == "GET" and path == "/api/cover" then
             local file_path = query.path
+            local nav_context = self:_buildNavigationContext(query.scope, safe_mode, false)
             if not file_path then
                 self:_sendJSON(client, 400, {error = "Missing path parameter"})
                 return
             end
-            local ok, err_msg = FileOps:getBookCover(client, file_path, self)
+            local ok, err_msg = FileOps:getBookCover(client, file_path, self, {
+                scope = nav_context.scope,
+                allow_root_scopes = nav_context.allow_root_scopes,
+            })
             if not ok then
                 self:_sendJSON(client, 404, {error = err_msg or "Cover not found"})
             end
@@ -254,8 +262,20 @@ function HttpServer:_route(client, method, path, query, headers, body)
             local sort_by = query.sort or "name"
             local sort_order = query.order or "asc"
             local filter = query.filter or ""
-            local result, err_msg = FileOps:listDirectory(dir, sort_by, sort_order, filter, safe_mode)
+            local include_hidden = self:_isTruthyFlag(query.hidden)
+            local nav_context = self:_buildNavigationContext(query.scope, safe_mode, include_hidden)
+            local result, err_msg = FileOps:listDirectory(dir, sort_by, sort_order, filter, {
+                safe_mode = safe_mode,
+                scope = nav_context.scope,
+                include_hidden = nav_context.include_hidden,
+            })
             if result then
+                result.available_scopes = nav_context.available_scopes
+                result.default_scope = nav_context.default_scope
+                result.current_scope = nav_context.scope
+                result.can_show_hidden = nav_context.can_show_hidden
+                result.include_hidden = nav_context.include_hidden
+                result.safe_mode = safe_mode
                 self:_sendJSON(client, 200, result)
             else
                 self:_sendJSON(client, 400, {error = err_msg or "Cannot list directory"})
@@ -263,23 +283,31 @@ function HttpServer:_route(client, method, path, query, headers, body)
 
         elseif method == "GET" and path == "/api/download" then
             local file_path = query.path
+            local nav_context = self:_buildNavigationContext(query.scope, safe_mode, false)
             if not file_path then
                 self:_sendJSON(client, 400, {error = "Missing path parameter"})
                 return
             end
             local inline = query.preview == "1"
-            local ok, err_msg, status_code = FileOps:downloadFile(client, file_path, self, inline, safe_mode)
+            local ok, err_msg, status_code = FileOps:downloadFile(client, file_path, self, inline, {
+                safe_mode = safe_mode,
+                scope = nav_context.scope,
+            })
             if not ok then
                 self:_sendJSON(client, status_code or 400, {error = err_msg or "Cannot download file"})
             end
 
         elseif method == "POST" and path == "/api/upload" then
             local dir = query.path or "/"
+            local nav_context = self:_buildNavigationContext(query.scope, safe_mode, false)
             local content_type = headers["content-type"] or ""
             if content_type:match("multipart/form%-data") then
                 local boundary = content_type:match("boundary=([^\r\n;]+)")
                 if boundary then
-                    local ok, err_msg = FileOps:handleUpload(dir, body, boundary)
+                    local ok, err_msg = FileOps:handleUpload(dir, body, boundary, {
+                        scope = nav_context.scope,
+                        allow_root_scopes = nav_context.allow_root_scopes,
+                    })
                     if ok then
                         self:_sendJSON(client, 200, {success = true, message = "Upload complete"})
                     else
@@ -295,7 +323,11 @@ function HttpServer:_route(client, method, path, query, headers, body)
         elseif method == "POST" and path == "/api/mkdir" then
             local data = self:_parseJSON(body)
             if data and data.path then
-                local ok, err_msg = FileOps:createDirectory(data.path)
+                local nav_context = self:_buildNavigationContext(data.scope, safe_mode, false)
+                local ok, err_msg = FileOps:createDirectory(data.path, {
+                    scope = nav_context.scope,
+                    allow_root_scopes = nav_context.allow_root_scopes,
+                })
                 if ok then
                     self:_sendJSON(client, 200, {success = true})
                 else
@@ -308,7 +340,11 @@ function HttpServer:_route(client, method, path, query, headers, body)
         elseif method == "POST" and path == "/api/rename" then
             local data = self:_parseJSON(body)
             if data and data.old_path and data.new_path then
-                local ok, err_msg = FileOps:rename(data.old_path, data.new_path)
+                local nav_context = self:_buildNavigationContext(data.scope, safe_mode, false)
+                local ok, err_msg = FileOps:rename(data.old_path, data.new_path, {
+                    scope = nav_context.scope,
+                    allow_root_scopes = nav_context.allow_root_scopes,
+                })
                 if ok then
                     self:_sendJSON(client, 200, {success = true})
                 else
@@ -321,7 +357,13 @@ function HttpServer:_route(client, method, path, query, headers, body)
         elseif method == "POST" and path == "/api/move" then
             local data = self:_parseJSON(body)
             if data and data.old_path and data.new_path then
-                local ok, err_msg = FileOps:move(data.old_path, data.new_path)
+                local old_context = self:_buildNavigationContext(data.old_scope or data.scope, safe_mode, false)
+                local new_context = self:_buildNavigationContext(data.new_scope or data.scope, safe_mode, false)
+                local ok, err_msg = FileOps:move(data.old_path, data.new_path, {
+                    old_scope = old_context.scope,
+                    new_scope = new_context.scope,
+                    allow_root_scopes = not safe_mode,
+                })
                 if ok then
                     self:_sendJSON(client, 200, {success = true})
                 else
@@ -334,7 +376,13 @@ function HttpServer:_route(client, method, path, query, headers, body)
         elseif method == "POST" and path == "/api/copy" then
             local data = self:_parseJSON(body)
             if data and data.old_path and data.new_path then
-                local ok, err_msg = FileOps:copyFile(data.old_path, data.new_path)
+                local old_context = self:_buildNavigationContext(data.old_scope or data.scope, safe_mode, false)
+                local new_context = self:_buildNavigationContext(data.new_scope or data.scope, safe_mode, false)
+                local ok, err_msg = FileOps:copyFile(data.old_path, data.new_path, {
+                    old_scope = old_context.scope,
+                    new_scope = new_context.scope,
+                    allow_root_scopes = not safe_mode,
+                })
                 if ok then
                     self:_sendJSON(client, 200, {success = true})
                 else
@@ -347,8 +395,11 @@ function HttpServer:_route(client, method, path, query, headers, body)
         elseif method == "POST" and path == "/api/delete" then
             local data = self:_parseJSON(body)
             if data and data.path then
+                local nav_context = self:_buildNavigationContext(data.scope, safe_mode, false)
                 local delete_options = {
                     safe_mode = safe_mode,
+                    scope = nav_context.scope,
+                    allow_root_scopes = nav_context.allow_root_scopes,
                     delete_sdr = data.delete_sdr == true,
                     recursive = data.recursive == true,
                 }
@@ -368,6 +419,43 @@ function HttpServer:_route(client, method, path, query, headers, body)
     else
         self:_sendError(client, 404, "Not Found")
     end
+end
+
+function HttpServer:_isTruthyFlag(value)
+    if value == nil then
+        return false
+    end
+    value = tostring(value):lower()
+    return value == "1" or value == "true" or value == "yes" or value == "on"
+end
+
+function HttpServer:_buildNavigationContext(requested_scope, safe_mode, include_hidden)
+    local fileops = self._fileops
+    local default_scope = fileops:getDefaultScopeId()
+    local allow_root_scopes = not safe_mode
+    local available_scopes = fileops:getNavigationScopes(allow_root_scopes)
+    local effective_scope = requested_scope or default_scope
+    local scope_found = false
+
+    for _, scope in ipairs(available_scopes) do
+        if scope.id == effective_scope then
+            scope_found = true
+            break
+        end
+    end
+
+    if not scope_found then
+        effective_scope = default_scope
+    end
+
+    return {
+        default_scope = default_scope,
+        scope = effective_scope,
+        available_scopes = available_scopes,
+        can_show_hidden = not safe_mode,
+        include_hidden = include_hidden == true and not safe_mode,
+        allow_root_scopes = allow_root_scopes,
+    }
 end
 
 function HttpServer:_serveIndex(client)

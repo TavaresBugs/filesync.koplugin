@@ -186,6 +186,14 @@ html, body {
     flex-wrap: wrap;
 }
 
+.toolbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
 .search-box {
     flex: 1;
     min-width: 160px;
@@ -239,6 +247,14 @@ html, body {
     background-repeat: no-repeat;
     background-position: right 8px center;
     padding-right: 28px;
+}
+
+.scope-select {
+    min-width: 120px;
+}
+
+.toolbar-toggle {
+    min-width: 96px;
 }
 
 /* ===== Buttons ===== */
@@ -408,6 +424,14 @@ html, body {
     opacity: 1;
 }
 
+.file-item.is-hidden .file-name {
+    color: var(--text-secondary);
+}
+
+.file-item.is-hidden .file-meta {
+    color: var(--text-tertiary);
+}
+
 .file-icon {
     width: 40px;
     height: 40px;
@@ -496,6 +520,88 @@ html, body {
 
 .file-item.selection-mode .file-actions {
     display: none;
+}
+
+.file-list.view-grid,
+.file-list.view-grid-large {
+    display: grid;
+    gap: 12px;
+}
+
+.file-list.view-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.file-list.view-grid-large {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.file-list.view-grid .file-item,
+.file-list.view-grid-large .file-item {
+    position: relative;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 0;
+    min-height: 180px;
+    height: 100%;
+}
+
+.file-list.view-grid .file-select-marker,
+.file-list.view-grid-large .file-select-marker {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
+.file-list.view-grid .file-item.selection-mode,
+.file-list.view-grid-large .file-item.selection-mode {
+    padding-left: 12px;
+}
+
+.file-list.view-grid .file-icon,
+.file-list.view-grid-large .file-icon {
+    margin: 0 auto;
+}
+
+.file-list.view-grid-large .file-icon {
+    width: 48px;
+    height: 48px;
+}
+
+.file-list.view-grid-large .file-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.file-list.view-grid .file-info,
+.file-list.view-grid-large .file-info {
+    text-align: center;
+}
+
+.file-list.view-grid .file-name,
+.file-list.view-grid-large .file-name {
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.file-list.view-grid .file-meta,
+.file-list.view-grid-large .file-meta {
+    justify-content: center;
+}
+
+.file-list.view-grid .file-actions,
+.file-list.view-grid-large .file-actions {
+    margin-top: auto;
+    justify-content: flex-end;
+}
+
+.file-list.view-grid .file-actions .btn-icon,
+.file-list.view-grid-large .file-actions .btn-icon {
+    opacity: 1;
 }
 
 /* Always show actions on touch devices */
@@ -963,6 +1069,7 @@ html, body {
     .header { padding: 10px 12px; }
     .breadcrumbs-wrap { padding: 10px 12px 2px; }
     .toolbar { padding: 6px 12px; }
+    .toolbar-controls { width: 100%; margin-left: 0; }
     .file-list { padding: 4px 12px 100px; }
     .dropzone { padding: 0 12px; }
     .upload-progress { padding: 0 12px; }
@@ -1232,15 +1339,20 @@ html, body {
         </svg>
         <input type="text" id="searchInput" placeholder="Filter files..." oninput="onFilterChange()">
     </div>
-    <select class="sort-select" id="sortSelect" onchange="onSortChange()">
-        <option value="name-asc" data-i18n="sort_name_asc">Name A-Z</option>
-        <option value="name-desc" data-i18n="sort_name_desc">Name Z-A</option>
-        <option value="date-desc" data-i18n="sort_newest">Newest first</option>
-        <option value="date-asc" data-i18n="sort_oldest">Oldest first</option>
-        <option value="size-desc" data-i18n="sort_largest">Largest first</option>
-        <option value="size-asc" data-i18n="sort_smallest">Smallest first</option>
-        <option value="type-asc" data-i18n="sort_type">Type</option>
-    </select>
+    <div class="toolbar-controls">
+        <select class="sort-select scope-select" id="scopeSelect" onchange="onScopeChange()" hidden></select>
+        <button class="btn btn-secondary btn-sm toolbar-toggle" id="btnHiddenToggle" onclick="toggleHiddenFiles()" type="button" hidden></button>
+        <button class="btn btn-secondary btn-sm toolbar-toggle" id="btnViewMode" onclick="toggleViewMode()" type="button"></button>
+        <select class="sort-select" id="sortSelect" onchange="onSortChange()">
+            <option value="name-asc" data-i18n="sort_name_asc">Name A-Z</option>
+            <option value="name-desc" data-i18n="sort_name_desc">Name Z-A</option>
+            <option value="date-desc" data-i18n="sort_newest">Newest first</option>
+            <option value="date-asc" data-i18n="sort_oldest">Oldest first</option>
+            <option value="size-desc" data-i18n="sort_largest">Largest first</option>
+            <option value="size-asc" data-i18n="sort_smallest">Smallest first</option>
+            <option value="type-asc" data-i18n="sort_type">Type</option>
+        </select>
+    </div>
 </div>
 
 <!-- Upload Drop Zone -->
@@ -1464,7 +1576,14 @@ html, body {
             invalid_server_response: "Invalid server response",
             server_error: "Server error",
             request_failed: "Request failed",
-            book_cover: "Book cover"
+            book_cover: "Book cover",
+            storage_scope: "Storage",
+            system_scope: "System",
+            show_hidden_files: "Show hidden",
+            hide_hidden_files: "Hide hidden",
+            list_view: "List",
+            grid_view: "Grid",
+            grid_large_view: "Large grid"
         },
         es: {
             filesync: "FileSync",
@@ -1544,7 +1663,14 @@ html, body {
             invalid_server_response: "Respuesta inv\u00e1lida del servidor",
             server_error: "Error del servidor",
             request_failed: "Solicitud fallida",
-            book_cover: "Portada del libro"
+            book_cover: "Portada del libro",
+            storage_scope: "Almacenamiento",
+            system_scope: "Sistema",
+            show_hidden_files: "Mostrar ocultos",
+            hide_hidden_files: "Ocultar ocultos",
+            list_view: "Lista",
+            grid_view: "Cuadr\u00edcula",
+            grid_large_view: "Cuadr\u00edcula grande"
         },
         pt_BR: {
             filesync: "FileSync",
@@ -1624,7 +1750,14 @@ html, body {
             invalid_server_response: "Resposta inv\u00e1lida do servidor",
             server_error: "Erro do servidor",
             request_failed: "Falha na requisi\u00e7\u00e3o",
-            book_cover: "Capa do livro"
+            book_cover: "Capa do livro",
+            storage_scope: "Armazenamento",
+            system_scope: "Sistema",
+            show_hidden_files: "Mostrar ocultos",
+            hide_hidden_files: "Ocultar ocultos",
+            list_view: "Lista",
+            grid_view: "Grade",
+            grid_large_view: "Grade grande"
         },
         zh: {
             filesync: "FileSync",
@@ -1682,7 +1815,14 @@ html, body {
             upload_files_title: "上传文件",
             new_folder_title: "新建文件夹",
             also_delete_sdr: "同时删除阅读元数据（.sdr）",
-            image_preview: "图片预览"
+            image_preview: "图片预览",
+            storage_scope: "存储",
+            system_scope: "系统",
+            show_hidden_files: "显示隐藏项",
+            hide_hidden_files: "隐藏隐藏项",
+            list_view: "列表",
+            grid_view: "网格",
+            grid_large_view: "大网格"
         }
     };
     var currentLang = "en";
@@ -1729,6 +1869,8 @@ html, body {
         document.getElementById('modalCancelBtn').textContent = t('cancel');
         document.getElementById('confirmCancelBtn').textContent = t('cancel');
         updateParentNav();
+        updateNavigationContextUI();
+        updateViewModeUI();
         updateClipboardUI();
         updateSelectionUI();
     }
@@ -1738,6 +1880,12 @@ html, body {
     var currentSort = 'name';
     var currentOrder = 'asc';
     var currentFilter = '';
+    var currentScope = 'storage';
+    var defaultScope = 'storage';
+    var availableScopes = [];
+    var canShowHidden = false;
+    var showHiddenFiles = false;
+    var viewMode = 'list';
     var uploadZoneVisible = false;
     var modalCallback = null;
     var confirmCallback = null;
@@ -1746,7 +1894,13 @@ html, body {
     var currentDetailEntry = null;
     var selectionMode = false;
     var selectedPaths = [];
-    var clipboardState = { mode: null, paths: [] };
+    var clipboardState = { mode: null, items: [] };
+    try {
+        var storedViewMode = localStorage.getItem('filesync_view_mode');
+        if (storedViewMode === 'grid' || storedViewMode === 'grid-large') {
+            viewMode = storedViewMode;
+        }
+    } catch (e) {}
 
     // ===== Icons =====
     var icons = {
@@ -1785,47 +1939,158 @@ html, body {
         return data;
     }
 
+    function getScopeLabel(scopeId) {
+        if (scopeId === 'system') {
+            return t('system_scope');
+        }
+        return t('storage_scope');
+    }
+
+    function setFileListViewMode() {
+        var list = document.getElementById('fileList');
+        if (!list) return;
+        list.classList.remove('view-grid', 'view-grid-large');
+        if (viewMode === 'grid') {
+            list.classList.add('view-grid');
+        } else if (viewMode === 'grid-large') {
+            list.classList.add('view-grid-large');
+        }
+    }
+
+    function updateViewModeUI() {
+        var btn = document.getElementById('btnViewMode');
+        if (!btn) return;
+        var label = t(viewMode === 'grid' ? 'grid_view' : (viewMode === 'grid-large' ? 'grid_large_view' : 'list_view'));
+        btn.textContent = label;
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        setFileListViewMode();
+    }
+
+    function getNextViewMode() {
+        if (viewMode === 'list') return 'grid';
+        if (viewMode === 'grid') return 'grid-large';
+        return 'list';
+    }
+
+    function normalizeScope(scopeId) {
+        return scopeId === 'system' ? 'system' : 'storage';
+    }
+
+    function updateNavigationContextFromResponse(data) {
+        availableScopes = Array.isArray(data && data.available_scopes) ? data.available_scopes.slice() : [];
+        defaultScope = normalizeScope(data && data.default_scope);
+        canShowHidden = !!(data && data.can_show_hidden);
+        showHiddenFiles = !!(data && data.include_hidden);
+        currentScope = normalizeScope((data && data.current_scope) || currentScope || defaultScope);
+    }
+
+    function updateNavigationContextUI() {
+        var scopeSelect = document.getElementById('scopeSelect');
+        var hiddenBtn = document.getElementById('btnHiddenToggle');
+
+        if (scopeSelect) {
+            scopeSelect.innerHTML = '';
+            for (var i = 0; i < availableScopes.length; i++) {
+                var scope = availableScopes[i];
+                var option = document.createElement('option');
+                option.value = scope.id;
+                option.textContent = getScopeLabel(scope.id);
+                scopeSelect.appendChild(option);
+            }
+            scopeSelect.value = currentScope;
+            scopeSelect.hidden = availableScopes.length <= 1;
+        }
+
+        if (hiddenBtn) {
+            var hiddenLabel = showHiddenFiles ? t('hide_hidden_files') : t('show_hidden_files');
+            hiddenBtn.textContent = hiddenLabel;
+            hiddenBtn.title = hiddenLabel;
+            hiddenBtn.setAttribute('aria-label', hiddenLabel);
+            hiddenBtn.hidden = !canShowHidden;
+            hiddenBtn.classList.toggle('active', canShowHidden && showHiddenFiles);
+        }
+    }
+
+    function buildHistoryURL(path, scope, detail) {
+        var params = new URLSearchParams();
+        params.set('path', path || '/');
+        params.set('scope', normalizeScope(scope || currentScope || defaultScope));
+        if (detail) {
+            params.set('detail', '1');
+        }
+        return '#' + params.toString();
+    }
+
+    function replaceCurrentHistoryState(detailPath) {
+        var detail = !!detailPath;
+        var path = detailPath || currentPath;
+        history.replaceState(
+            { path: path, scope: currentScope, detail: detail },
+            '',
+            buildHistoryURL(path, currentScope, detail)
+        );
+    }
+
+    function normalizeNavigationTarget(path, scope, detail) {
+        return {
+            path: path || '/',
+            scope: normalizeScope(scope || currentScope || defaultScope),
+            detail: detail === true
+        };
+    }
+
     // ===== Navigation =====
     // Internal navigation: sets state and loads files WITHOUT pushing history
-    function _navigateInternal(path) {
+    function _navigateInternal(path, scope) {
+        var nextScope = normalizeScope(scope || currentScope || defaultScope);
         path = path || '/';
-        if (currentPath !== path) {
+        if (currentPath !== path || currentScope !== nextScope) {
             selectionMode = false;
             selectedPaths = [];
             updateSelectionUI();
         }
+        if (currentDetailEntry) {
+            _hideDetailInternal();
+        }
         closeUploadZone();
+        currentScope = nextScope;
         currentPath = path;
         currentFilter = '';
         document.getElementById('searchInput').value = '';
         updateParentNav();
+        updateNavigationContextUI();
         loadFiles();
     }
 
     // Public navigate: updates state and pushes a history entry
-    window.navigate = function(path) {
+    window.navigate = function(path, scope) {
+        var nextScope = normalizeScope(scope || currentScope || defaultScope);
         path = path || '/';
-        _navigateInternal(path);
-        // Only push if the hash actually changed (decode to handle %20 etc.)
-        var currentHash;
-        try { currentHash = decodeURIComponent(window.location.hash); } catch(e) { currentHash = window.location.hash; }
-        if (currentHash !== '#' + path) {
-            history.pushState({path: path}, '', '#' + encodeURI(path));
+        _navigateInternal(path, nextScope);
+        var nextUrl = buildHistoryURL(path, nextScope, false);
+        if (window.location.hash !== nextUrl) {
+            history.pushState({ path: path, scope: nextScope, detail: false }, '', nextUrl);
         }
     };
 
     async function loadFiles() {
         var list = document.getElementById('fileList');
+        setFileListViewMode();
         list.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">' + escapeHtml(t('loading')) + '</div></div>';
 
         try {
             var params = new URLSearchParams({
                 path: currentPath,
+                scope: currentScope,
                 sort: currentSort,
                 order: currentOrder,
-                filter: currentFilter
+                filter: currentFilter,
+                hidden: showHiddenFiles ? '1' : '0'
             });
             var data = await api('GET', '/api/files?' + params);
+            updateNavigationContextFromResponse(data);
+            updateNavigationContextUI();
             renderBreadcrumbs(data.breadcrumbs);
             renderFiles(data.entries);
         } catch (err) {
@@ -1846,7 +2111,7 @@ html, body {
 
     window.navigateUp = function() {
         if (currentPath === '/') return;
-        navigate(getParentPath(currentPath));
+        navigate(getParentPath(currentPath), currentScope);
     };
 
     function renderBreadcrumbs(crumbs) {
@@ -1859,7 +2124,7 @@ html, body {
             var displayName = crumbs[i].name;
             if (displayName === "Home") displayName = t('home');
             html += '<span class="breadcrumb-item' + (isLast ? ' active' : '') + '"' +
-                     (isLast ? '' : ' onclick="navigate(\'' + escapeAttr(crumbs[i].path) + '\')"') +
+                     (isLast ? '' : ' onclick="navigate(\'' + escapeAttr(crumbs[i].path) + '\', \'' + escapeAttr(currentScope) + '\')"') +
                      '>' + escapeHtml(displayName) + '</span>';
         }
         el.innerHTML = html;
@@ -1888,6 +2153,7 @@ html, body {
             var typeLabel = entry.is_dir ? t('folder_label') : ext;
             var isSelected = selectedPaths.indexOf(entry.path) !== -1;
             var itemClass = 'file-item ' + (entry.is_dir ? 'is-dir' : 'is-file');
+            if (entry.is_hidden) itemClass += ' is-hidden';
             if (selectionMode) itemClass += ' selection-mode';
             if (isSelected) itemClass += ' selected';
 
@@ -1916,6 +2182,7 @@ html, body {
             html += '</div>';
         }
         list.innerHTML = html;
+        setFileListViewMode();
     }
 
     window.onFileClick = function(event, isDir, path) {
@@ -1934,7 +2201,7 @@ html, body {
     // ===== File Operations =====
     window.downloadFile = function(path) {
         var a = document.createElement('a');
-        a.href = '/api/download?path=' + encodeURIComponent(path);
+        a.href = '/api/download?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope);
         a.download = '';
         document.body.appendChild(a);
         a.click();
@@ -1947,7 +2214,7 @@ html, body {
             try {
                 var parentPath = path.substring(0, path.lastIndexOf('/')) || '/';
                 var newPath = parentPath + '/' + newName;
-                await api('POST', '/api/rename', { old_path: path, new_path: newPath });
+                await api('POST', '/api/rename', { old_path: path, new_path: newPath, scope: currentScope });
                 showToast(t('renamed_successfully'), 'success');
                 loadFiles();
             } catch (err) {
@@ -1982,7 +2249,7 @@ html, body {
         for (var i = 0; i < entries.length; i++) {
             var entry = entries[i];
             try {
-                var body = { path: entry.path };
+                var body = { path: entry.path, scope: currentScope };
                 if (entry.is_dir && !entry.is_empty) {
                     body.recursive = true;
                 }
@@ -2077,7 +2344,7 @@ html, body {
     }
 
     function hasClipboardItems() {
-        return !!(clipboardState.mode && clipboardState.paths && clipboardState.paths.length);
+        return !!(clipboardState.mode && clipboardState.items && clipboardState.items.length);
     }
 
     function updateClipboardUI() {
@@ -2091,11 +2358,11 @@ html, body {
         pasteBtn.setAttribute('aria-disabled', hasClipboard ? 'false' : 'true');
     }
 
-    function setClipboard(mode, paths) {
-        var nextPaths = Array.isArray(paths) ? paths.slice() : [];
+    function setClipboard(mode, items) {
+        var nextItems = Array.isArray(items) ? items.slice() : [];
         clipboardState = {
-            mode: nextPaths.length ? mode : null,
-            paths: nextPaths
+            mode: nextItems.length ? mode : null,
+            items: nextItems
         };
         updateClipboardUI();
     }
@@ -2121,20 +2388,24 @@ html, body {
         var completedPaths = [];
         var failures = [];
 
-        for (var i = 0; i < operation.paths.length; i++) {
-            var sourcePath = operation.paths[i];
+        for (var i = 0; i < operation.items.length; i++) {
+            var item = operation.items[i];
+            var sourcePath = item.path;
             var entryName = getPathName(sourcePath);
             var destinationPath = buildChildPath(operation.destination, entryName);
 
             try {
                 await api('POST', endpoint, {
                     old_path: sourcePath,
-                    new_path: destinationPath
+                    new_path: destinationPath,
+                    old_scope: item.scope,
+                    new_scope: operation.destinationScope
                 });
                 completedPaths.push(sourcePath);
             } catch (err) {
                 failures.push({
                     path: sourcePath,
+                    scope: item.scope,
                     error: err.message
                 });
             }
@@ -2206,14 +2477,18 @@ html, body {
 
     window.copySelectedItems = function() {
         if (!selectedPaths.length) return;
-        setClipboard('copy', selectedPaths);
+        setClipboard('copy', selectedPaths.map(function(path) {
+            return { path: path, scope: currentScope };
+        }));
         showToast(t('clipboard_copy_ready').replace('{count}', selectedPaths.length), 'success');
         window.cancelSelection();
     };
 
     window.cutSelectedItems = function() {
         if (!selectedPaths.length) return;
-        setClipboard('cut', selectedPaths);
+        setClipboard('cut', selectedPaths.map(function(path) {
+            return { path: path, scope: currentScope };
+        }));
         showToast(t('clipboard_cut_ready').replace('{count}', selectedPaths.length), 'success');
         window.cancelSelection();
     };
@@ -2222,8 +2497,9 @@ html, body {
         if (!hasClipboardItems()) return;
         var operation = {
             mode: clipboardState.mode,
-            paths: clipboardState.paths.slice(),
-            destination: currentPath
+            items: clipboardState.items.slice(),
+            destination: currentPath,
+            destinationScope: currentScope
         };
 
         var result = await executeClipboardOperation(operation);
@@ -2231,7 +2507,10 @@ html, body {
         if (operation.mode === 'cut') {
             if (result.failures.length > 0) {
                 setClipboard('cut', result.failures.map(function(item) {
-                    return item.path;
+                    return {
+                        path: item.path,
+                        scope: item.scope
+                    };
                 }));
             } else {
                 clearClipboard();
@@ -2307,7 +2586,7 @@ html, body {
             imagePreviewEl.style.display = 'flex';
             imagePreviewEl.innerHTML = '<div class="cover-spinner"></div>';
             var previewImg = document.createElement('img');
-            previewImg.src = '/api/download?path=' + encodeURIComponent(path) + '&preview=1';
+            previewImg.src = '/api/download?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope) + '&preview=1';
             previewImg.alt = t('image_preview');
             previewImg.onload = function() {
                 imagePreviewEl.innerHTML = '';
@@ -2358,7 +2637,7 @@ html, body {
             coverEl.style.display = 'none';
         } else {
             // Fetch metadata asynchronously for non-image files
-            fetch('/api/metadata?path=' + encodeURIComponent(path))
+            fetch('/api/metadata?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope))
                 .then(function(res) { return res.json(); })
                 .then(function(meta) {
                     if (!currentDetailEntry || currentDetailEntry.path !== path) return;
@@ -2377,7 +2656,7 @@ html, body {
                     // Handle cover image
                     if (meta.has_cover) {
                         var img = document.createElement('img');
-                        img.src = '/api/cover?path=' + encodeURIComponent(path);
+                        img.src = '/api/cover?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope);
                         img.alt = t('book_cover');
                         img.onerror = function() {
                             coverEl.innerHTML = buildCoverPlaceholder(typeClass);
@@ -2398,11 +2677,9 @@ html, body {
     // Public showFileDetail: shows detail and pushes a history entry
     window.showFileDetail = function(path) {
         _showDetailInternal(path);
-        var currentHash;
-        try { currentHash = decodeURIComponent(window.location.hash); } catch(e) { currentHash = window.location.hash; }
-        var hashTarget = '#' + path + '!detail';
-        if (currentHash !== hashTarget) {
-            history.pushState({path: path, detail: true}, '', '#' + encodeURI(path) + '!detail');
+        var nextUrl = buildHistoryURL(path, currentScope, true);
+        if (window.location.hash !== nextUrl) {
+            history.pushState({ path: path, scope: currentScope, detail: true }, '', nextUrl);
         }
     };
 
@@ -2495,11 +2772,11 @@ html, body {
             try {
                 var parentPath = entry.path.substring(0, entry.path.lastIndexOf('/')) || '/';
                 var newPath = parentPath + '/' + finalName;
-                await api('POST', '/api/rename', { old_path: entry.path, new_path: newPath });
+                await api('POST', '/api/rename', { old_path: entry.path, new_path: newPath, scope: currentScope });
                 showToast(t('renamed_successfully'), 'success');
                 restoreModalInput();
                 _hideDetailInternal();
-                history.replaceState({path: currentPath}, '', '#' + encodeURI(currentPath));
+                replaceCurrentHistoryState();
                 loadFiles();
             } catch (err) {
                 showToast(t('rename_failed') + ' ' + err.message, 'error');
@@ -2528,14 +2805,14 @@ html, body {
             t('delete_label'),
             async function() {
                 try {
-                    var body = { path: entry.path };
+                    var body = { path: entry.path, scope: currentScope };
                     if (showSdrCheckbox) {
                         body.delete_sdr = document.getElementById('confirmSdrCheckbox').checked;
                     }
                     await api('POST', '/api/delete', body);
                     showToast(t('deleted_successfully'), 'success');
                     _hideDetailInternal();
-                    history.replaceState({path: currentPath}, '', '#' + encodeURI(currentPath));
+                    replaceCurrentHistoryState();
                     loadFiles();
                 } catch (err) {
                     showToast(t('delete_failed') + ' ' + err.message, 'error');
@@ -2550,7 +2827,7 @@ html, body {
             if (!name) return;
             try {
                 var newPath = (currentPath === '/' ? '' : currentPath) + '/' + name;
-                await api('POST', '/api/mkdir', { path: newPath });
+                await api('POST', '/api/mkdir', { path: newPath, scope: currentScope });
                 showToast(t('folder_created'), 'success');
                 loadFiles();
             } catch (err) {
@@ -2605,7 +2882,7 @@ html, body {
             formData.append('file', file);
 
             var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/upload?path=' + encodeURIComponent(currentPath));
+            xhr.open('POST', '/api/upload?path=' + encodeURIComponent(currentPath) + '&scope=' + encodeURIComponent(currentScope));
 
             xhr.upload.onprogress = function(e) {
                 if (e.lengthComputable) {
@@ -2684,6 +2961,31 @@ html, body {
     });
 
     // ===== Sort & Filter =====
+    window.onScopeChange = function() {
+        var scopeSelect = document.getElementById('scopeSelect');
+        if (!scopeSelect) return;
+        var nextScope = normalizeScope(scopeSelect.value);
+        if (nextScope === currentScope) return;
+        showHiddenFiles = false;
+        navigate('/', nextScope);
+    };
+
+    window.toggleHiddenFiles = function() {
+        if (!canShowHidden) return;
+        showHiddenFiles = !showHiddenFiles;
+        updateNavigationContextUI();
+        loadFiles();
+    };
+
+    window.toggleViewMode = function() {
+        viewMode = getNextViewMode();
+        try {
+            localStorage.setItem('filesync_view_mode', viewMode);
+        } catch (e) {}
+        updateViewModeUI();
+        renderFiles(currentEntries);
+    };
+
     window.onSortChange = function() {
         var val = document.getElementById('sortSelect').value;
         var parts = val.split('-');
@@ -2813,47 +3115,66 @@ html, body {
     }
 
     // ===== History / popstate =====
-    // Parse the current hash and return {path, detail} without modifying state
     function _parseHash() {
         var hash = window.location.hash;
         if (!hash || hash === '#' || hash === '#/') {
-            return {path: '/', detail: false};
+            return { path: '/', scope: currentScope || defaultScope || 'storage', detail: false };
         }
-        // Strip leading '#' and decode URL-encoded characters (spaces, parens, etc.)
-        var raw;
-        try { raw = decodeURIComponent(hash.substring(1)); } catch(e) { raw = hash.substring(1); }
+
+        var raw = hash.substring(1);
+        if (raw.indexOf('path=') !== -1 || raw.indexOf('scope=') !== -1 || raw.indexOf('detail=') !== -1) {
+            var params = new URLSearchParams(raw);
+            return normalizeNavigationTarget(
+                params.get('path') || '/',
+                params.get('scope') || currentScope || defaultScope,
+                params.get('detail') === '1' || params.get('detail') === 'true'
+            );
+        }
+
+        try { raw = decodeURIComponent(raw); } catch (e) {}
         if (raw.endsWith('!detail')) {
-            return {path: raw.substring(0, raw.length - 7), detail: true};
+            return normalizeNavigationTarget(raw.substring(0, raw.length - 7) || '/', currentScope || defaultScope, true);
         }
-        return {path: raw || '/', detail: false};
+        return normalizeNavigationTarget(raw || '/', currentScope || defaultScope, false);
     }
 
-    window.addEventListener('popstate', function() {
-        var state = _parseHash();
+    window.addEventListener('popstate', function(event) {
+        var state = normalizeNavigationTarget(
+            (event.state && event.state.path) || (_parseHash().path),
+            (event.state && event.state.scope) || (_parseHash().scope),
+            (event.state && event.state.detail) || false
+        );
         if (state.detail) {
             // If navigating to a detail view and we're already showing it, skip
-            if (currentDetailEntry && currentDetailEntry.path === state.path) return;
+            if (currentDetailEntry && currentDetailEntry.path === state.path && currentScope === state.scope) return;
             // We might need to navigate to the parent directory first to load entries
-            var parentPath = state.path.substring(0, state.path.lastIndexOf('/')) || '/';
-            if (currentPath !== parentPath) {
+            var parentPath = getParentPath(state.path);
+            if (currentPath !== parentPath || currentScope !== state.scope) {
                 // Need to load the directory first, then show detail once loaded
                 currentPath = parentPath;
+                currentScope = state.scope;
                 currentFilter = '';
                 document.getElementById('searchInput').value = '';
+                showHiddenFiles = false;
                 updateParentNav();
+                updateNavigationContextUI();
                 var params = new URLSearchParams({
                     path: currentPath,
+                    scope: currentScope,
                     sort: currentSort,
                     order: currentOrder,
-                    filter: currentFilter
+                    filter: currentFilter,
+                    hidden: showHiddenFiles ? '1' : '0'
                 });
                 api('GET', '/api/files?' + params).then(function(data) {
+                    updateNavigationContextFromResponse(data);
+                    updateNavigationContextUI();
                     renderBreadcrumbs(data.breadcrumbs);
                     renderFiles(data.entries);
                     _showDetailInternal(state.path);
                 }).catch(function() {
                     // If loading fails, just navigate to the directory
-                    _navigateInternal(parentPath);
+                    _navigateInternal(parentPath, state.scope);
                 });
             } else {
                 _showDetailInternal(state.path);
@@ -2863,25 +3184,28 @@ html, body {
             if (currentDetailEntry) {
                 _hideDetailInternal();
             }
-            _navigateInternal(state.path);
+            _navigateInternal(state.path, state.scope);
         }
     });
 
     // ===== Init =====
     // Read hash to determine initial state before loading
     var initState = _parseHash();
+    currentScope = initState.scope || currentScope;
     if (initState.detail) {
         // For detail view, start at the parent directory
-        var initParent = initState.path.substring(0, initState.path.lastIndexOf('/')) || '/';
+        var initParent = getParentPath(initState.path);
         currentPath = initParent;
     } else {
         currentPath = initState.path;
     }
     // Set the initial history entry (replaceState so we don't add an extra entry)
     history.replaceState(
-        initState.detail ? {path: initState.path, detail: true} : {path: currentPath},
+        initState.detail
+            ? { path: initState.path, scope: currentScope, detail: true }
+            : { path: currentPath, scope: currentScope, detail: false },
         '',
-        window.location.hash || '#/'
+        buildHistoryURL(initState.detail ? initState.path : currentPath, currentScope, initState.detail)
     );
 
     // Fetch language setting from server, then apply translations and load files

@@ -2062,6 +2062,7 @@ html, body {
     justify-content: flex-end;
 }
 
+#confirmOverlay .modal-actions,
 #modalOverlay .modal-actions {
     justify-content: center;
 }
@@ -2090,15 +2091,18 @@ html, body {
 }
 
 #modalOverlay .modal,
+#confirmOverlay .modal,
 #conflictOverlay .modal {
     position: relative;
     overflow: visible;
 }
 
+#confirmOverlay .modal,
 #modalOverlay .modal {
     padding-top: 24px;
 }
 
+#confirmOverlay .modal .modal-title,
 #modalOverlay .modal .modal-title {
     padding-right: 32px;
 }
@@ -2816,13 +2820,18 @@ html, body {
 <div class="modal-overlay" id="confirmOverlay" onclick="closeConfirm(event)">
     <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
+        <button class="modal-close-btn" id="confirmCloseBtn" type="button" onclick="closeConfirmButton(event)" aria-label="Cancel" title="Cancel">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+            </svg>
+        </button>
         <div class="modal-title" id="confirmTitle"></div>
         <p id="confirmMessage" style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;"></p>
         <label id="confirmSdrOption" style="display:none;font-size:14px;color:var(--text-secondary);margin-bottom:16px;cursor:pointer;align-items:center;gap:8px;">
             <input type="checkbox" id="confirmSdrCheckbox" checked> <span id="confirmSdrLabel"></span>
         </label>
         <div class="modal-actions">
-            <button class="btn btn-secondary" id="confirmCancelBtn" onclick="hideConfirm()">Cancel</button>
             <button class="btn btn-danger" id="confirmBtn" onclick="doConfirm()">Delete</button>
         </div>
     </div>
@@ -3457,11 +3466,12 @@ html, body {
         document.getElementById('dropzoneActions').setAttribute('aria-label', t('upload_zone_title'));
         document.getElementById('conflictCloseBtn').title = t('cancel');
         document.getElementById('conflictCloseBtn').setAttribute('aria-label', t('cancel'));
+        document.getElementById('confirmCloseBtn').title = t('cancel');
+        document.getElementById('confirmCloseBtn').setAttribute('aria-label', t('cancel'));
         document.getElementById('dropzoneText').innerHTML = t('dropzone_text') + ' <strong onclick="document.getElementById(\'fileInput\').click()">' + t('dropzone_browse') + '</strong>';
         // Modal default buttons
         document.getElementById('modalCloseBtn').title = t('cancel');
         document.getElementById('modalCloseBtn').setAttribute('aria-label', t('cancel'));
-        document.getElementById('confirmCancelBtn').textContent = t('cancel');
         updateThemeToggleUI();
         updateParentNav();
         updateNavigationContextUI();
@@ -5412,7 +5422,6 @@ html, body {
         document.getElementById('confirmTitle').textContent = title;
         document.getElementById('confirmMessage').textContent = message;
         document.getElementById('confirmBtn').textContent = btnText;
-        document.getElementById('confirmCancelBtn').textContent = t('cancel');
         var sdrOption = document.getElementById('confirmSdrOption');
         var sdrCheckbox = document.getElementById('confirmSdrCheckbox');
         if (showSdr) {
@@ -5429,6 +5438,11 @@ html, body {
     window.hideConfirm = function() {
         document.getElementById('confirmOverlay').classList.remove('open');
         confirmCallback = null;
+    };
+
+    window.closeConfirmButton = function(event) {
+        if (event) event.stopPropagation();
+        hideConfirm();
     };
 
     window.closeConfirm = function(e) {

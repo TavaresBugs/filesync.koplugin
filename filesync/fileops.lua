@@ -537,13 +537,20 @@ function FileOps:_streamDownload(client, full_path, server, inline, download_nam
     while true do
         local chunk = f:read(chunk_size)
         if not chunk then break end
-        local sent, send_err = client:send(chunk)
-        if not sent then
-            f:close()
-            if cleanup_path then
-                self:_removeTempPath(cleanup_path)
+        local index = 1
+        while index <= #chunk do
+            local sent, send_err, partial = client:send(chunk, index)
+            if sent then
+                index = sent + 1
+            elseif partial and partial >= index then
+                index = partial + 1
+            else
+                f:close()
+                if cleanup_path then
+                    self:_removeTempPath(cleanup_path)
+                end
+                return false, "Send error: " .. tostring(send_err)
             end
-            return false, "Send error: " .. tostring(send_err)
         end
     end
 

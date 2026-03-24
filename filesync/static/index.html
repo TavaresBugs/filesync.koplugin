@@ -1902,6 +1902,7 @@ html, body {
             html += '</div></div>';
             if (entry.is_dir) {
                 html += '<div class="file-actions">';
+                html += '<button class="btn-icon" onclick="event.stopPropagation(); downloadFile(\'' + escapeAttr(entry.path) + '\')" title="' + escapeHtml(t('download')) + '">' + icons.download + '</button>';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); renameItem(\'' + escapeAttr(entry.path) + '\', \'' + escapeAttr(entry.name) + '\')" title="' + escapeHtml(t('rename')) + '">' + icons.rename + '</button>';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); deleteItem(\'' + escapeAttr(entry.path) + '\')" title="' + escapeHtml(t('delete_label')) + '">' + icons.trash + '</button>';
                 html += '</div>';

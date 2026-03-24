@@ -36,6 +36,19 @@ local FileOps = {
     _root_dir = "/mnt/us",
 }
 
+local function command_succeeded(ok, why, code)
+    if ok == true then
+        return true
+    end
+    if type(ok) == "number" then
+        return ok == 0
+    end
+    if why == "exit" then
+        return code == 0
+    end
+    return false
+end
+
 function FileOps:setRootDir(dir)
     self._root_dir = dir
 end
@@ -322,53 +335,236 @@ function FileOps:listDirectory(rel_path, sort_by, sort_order, filter, safe_mode)
     }
 end
 
---- Download a file, sending it directly to the client socket
---- When inline is true, serve with Content-Disposition: inline (for image previews)
-function FileOps:downloadFile(client, rel_path, server, inline)
-    local full_path, err = self:_resolvePath(rel_path)
-    if not full_path then
-        return false, err
+function FileOps:_runShellCommand(cmd)
+    local ok, why, code = os.execute(cmd)
+    if command_succeeded(ok, why, code) then
+        return true
+    end
+    return false, code or why or ok
+end
+
+function FileOps:_removeTempPath(path)
+    if not path or path == "" then
+        return
+    end
+    os.execute("rm -rf " .. self:_shellEscape(path) .. " 2>/dev/null")
+end
+
+function FileOps:_copyFileContents(src_path, dst_path)
+    local src_file, src_err = io.open(src_path, "rb")
+    if not src_file then
+        return false, "Cannot open source file: " .. tostring(src_err)
+    end
+
+    local dst_file, dst_err = io.open(dst_path, "wb")
+    if not dst_file then
+        src_file:close()
+        return false, "Cannot create destination file: " .. tostring(dst_err)
+    end
+
+    local chunk_size = 65536
+    while true do
+        local chunk, read_err = src_file:read(chunk_size)
+        if read_err then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot read source file: " .. tostring(read_err)
+        end
+        if not chunk then break end
+        local write_ok, write_err = dst_file:write(chunk)
+        if not write_ok then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot write destination file: " .. tostring(write_err)
+        end
+    end
+
+    local close_ok, close_err = dst_file:close()
+    src_file:close()
+    if close_ok == false then
+        os.remove(dst_path)
+        return false, "Cannot finalize destination file: " .. tostring(close_err)
+    end
+
+    return true
+end
+
+function FileOps:_streamDownload(client, full_path, server, inline, download_name, mime_type, cleanup_path)
+    local f = io.open(full_path, "rb")
+    if not f then
+        if cleanup_path then
+            self:_removeTempPath(cleanup_path)
+        end
+        return false, "Cannot open file"
     end
 
     local attr = lfs.attributes(full_path)
     if not attr or attr.mode ~= "file" then
+        f:close()
+        if cleanup_path then
+            self:_removeTempPath(cleanup_path)
+        end
         return false, "Not a file"
     end
 
-    local f = io.open(full_path, "rb")
-    if not f then
-        return false, "Cannot open file"
-    end
-
-    local filename = full_path:match("([^/]+)$") or "download"
-    local mime_type = self:_getMimeType(filename)
-    local file_size = attr.size
-
-    -- Send headers
+    local filename = download_name or (full_path:match("([^/]+)$") or "download")
+    local content_type = mime_type or self:_getMimeType(filename)
     local disposition = inline
         and ('inline; filename="' .. filename .. '"')
         or ('attachment; filename="' .. filename .. '"')
+
     server:sendResponseHeaders(client, 200, {
-        ["Content-Type"] = mime_type,
-        ["Content-Length"] = tostring(file_size),
+        ["Content-Type"] = content_type,
+        ["Content-Length"] = tostring(attr.size),
         ["Content-Disposition"] = disposition,
         ["Connection"] = "close",
     })
 
-    -- Send file in chunks
-    local CHUNK_SIZE = 65536
+    local chunk_size = 65536
     while true do
-        local chunk = f:read(CHUNK_SIZE)
+        local chunk = f:read(chunk_size)
         if not chunk then break end
         local sent, send_err = client:send(chunk)
         if not sent then
             f:close()
+            if cleanup_path then
+                self:_removeTempPath(cleanup_path)
+            end
             return false, "Send error: " .. tostring(send_err)
         end
     end
 
     f:close()
+    if cleanup_path then
+        self:_removeTempPath(cleanup_path)
+    end
     return true
+end
+
+function FileOps:_copySafeDownloadTree(src_path, dst_path)
+    local attr = lfs.attributes(src_path)
+    if not attr then
+        return false, "Source does not exist"
+    end
+
+    if attr.mode == "directory" then
+        local ok, mkdir_err = lfs.mkdir(dst_path)
+        if not ok then
+            return false, "Cannot create temporary directory: " .. tostring(mkdir_err)
+        end
+
+        for name in lfs.dir(src_path) do
+            if name ~= "." and name ~= ".." then
+                if name:sub(1, 1) ~= "." then
+                    local child_src_path = src_path .. "/" .. name
+                    local child_attr = lfs.attributes(child_src_path)
+                    if child_attr then
+                        local is_dir = child_attr.mode == "directory"
+                        if not (is_dir and name:match("%.sdr$")) then
+                            if is_dir or self:isExtensionSafe(name) then
+                                local child_dst_path = dst_path .. "/" .. name
+                                local copy_ok, copy_err = self:_copySafeDownloadTree(child_src_path, child_dst_path)
+                                if not copy_ok then
+                                    return false, copy_err
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        return true
+    end
+
+    if attr.mode == "file" then
+        return self:_copyFileContents(src_path, dst_path)
+    end
+
+    return false, "Unsupported entry type"
+end
+
+function FileOps:_createDirectoryArchive(full_path, safe_mode)
+    if full_path == self._root_dir then
+        return nil, nil, nil, "Cannot download root directory", 403
+    end
+
+    local entry_name = full_path:match("([^/]+)$") or "download"
+    local archive_name = entry_name .. ".zip"
+    local temp_root = string.format("/tmp/filesync-download-%d-%d", os.time(), math.random(10000, 99999))
+    local archive_path = temp_root .. "/" .. archive_name
+    local zip_parent = full_path:match("(.+)/[^/]+$") or "/"
+    local zip_target = entry_name
+
+    local mkdir_ok, mkdir_err = self:_runShellCommand("mkdir -p " .. self:_shellEscape(temp_root) .. " 2>/dev/null")
+    if not mkdir_ok then
+        return nil, nil, nil, "Cannot prepare temporary archive directory: " .. tostring(mkdir_err)
+    end
+
+    if safe_mode then
+        local stage_root = temp_root .. "/stage"
+        local stage_entry = stage_root .. "/" .. entry_name
+        local stage_ok, stage_err = self:_runShellCommand("mkdir -p " .. self:_shellEscape(stage_root) .. " 2>/dev/null")
+        if not stage_ok then
+            self:_removeTempPath(temp_root)
+            return nil, nil, nil, "Cannot prepare temporary archive staging area: " .. tostring(stage_err)
+        end
+
+        local copy_ok, copy_err = self:_copySafeDownloadTree(full_path, stage_entry)
+        if not copy_ok then
+            self:_removeTempPath(temp_root)
+            return nil, nil, nil, copy_err
+        end
+
+        zip_parent = stage_root
+    end
+
+    local zip_cmd = "cd " .. self:_shellEscape(zip_parent)
+        .. " && zip -qr " .. self:_shellEscape(archive_path) .. " " .. self:_shellEscape(zip_target) .. " 2>/dev/null"
+    local zip_ok, zip_err = self:_runShellCommand(zip_cmd)
+    if not zip_ok then
+        logger.warn("FileSync: Failed to create directory archive", full_path, zip_err)
+        self:_removeTempPath(temp_root)
+        return nil, nil, nil, "Cannot create folder archive"
+    end
+
+    logger.info("FileSync: Created download archive", archive_path, "for", full_path)
+    return archive_path, archive_name, temp_root
+end
+
+--- Download a file, sending it directly to the client socket
+--- When inline is true, serve with Content-Disposition: inline (for image previews)
+function FileOps:downloadFile(client, rel_path, server, inline, safe_mode)
+    local full_path, err = self:_resolvePath(rel_path)
+    if not full_path then
+        return false, err, 400
+    end
+
+    local attr = lfs.attributes(full_path)
+    if not attr then
+        return false, "Source does not exist", 400
+    end
+
+    local filename = full_path:match("([^/]+)$") or "download"
+    if attr.mode == "file" then
+        if safe_mode and not self:isExtensionSafe(filename) then
+            return false, "Access denied: file type not allowed in safe mode", 403
+        end
+        return self:_streamDownload(client, full_path, server, inline, filename)
+    end
+
+    if attr.mode == "directory" then
+        local archive_path, archive_name, cleanup_path, archive_err, status_code =
+            self:_createDirectoryArchive(full_path, safe_mode)
+        if not archive_path then
+            return false, archive_err, status_code or 400
+        end
+        return self:_streamDownload(client, archive_path, server, false, archive_name, "application/zip", cleanup_path)
+    end
+
+    return false, "Unsupported entry type", 400
 end
 
 --- Handle multipart file upload

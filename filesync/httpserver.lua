@@ -267,18 +267,10 @@ function HttpServer:_route(client, method, path, query, headers, body)
                 self:_sendJSON(client, 400, {error = "Missing path parameter"})
                 return
             end
-            -- Block non-whitelisted files in safe mode
-            if safe_mode then
-                local filename = file_path:match("([^/]+)$")
-                if filename and not FileOps:isExtensionSafe(filename) then
-                    self:_sendJSON(client, 403, {error = "Access denied: file type not allowed in safe mode"})
-                    return
-                end
-            end
             local inline = query.preview == "1"
-            local ok, err_msg = FileOps:downloadFile(client, file_path, self, inline)
+            local ok, err_msg, status_code = FileOps:downloadFile(client, file_path, self, inline, safe_mode)
             if not ok then
-                self:_sendJSON(client, 400, {error = err_msg or "Cannot download file"})
+                self:_sendJSON(client, status_code or 400, {error = err_msg or "Cannot download file"})
             end
 
         elseif method == "POST" and path == "/api/upload" then

@@ -307,6 +307,7 @@ function HttpServer:_route(client, method, path, query, headers, body)
                     local ok, err_msg = FileOps:handleUpload(dir, body, boundary, {
                         scope = nav_context.scope,
                         allow_root_scopes = nav_context.allow_root_scopes,
+                        safe_mode = safe_mode,
                     })
                     if ok then
                         self:_sendJSON(client, 200, {success = true, message = "Upload complete"})

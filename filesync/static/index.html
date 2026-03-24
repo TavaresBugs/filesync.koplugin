@@ -2273,6 +2273,16 @@ html, body {
         </div>
         <div class="selection-bar-divider" aria-hidden="true"></div>
         <div class="selection-bar-actions">
+            <button class="selection-action" id="btnSelectionDownload" type="button" onclick="downloadSelectedItems()">
+                <span class="selection-action-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                </span>
+                <span class="selection-action-label" data-i18n="download">Download</span>
+            </button>
             <button class="selection-action" id="btnSelectionCopy" type="button" onclick="copySelectedItems()">
                 <span class="selection-action-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2854,6 +2864,7 @@ html, body {
         document.getElementById('btnFolder').setAttribute('aria-label', t('new_folder_title'));
         document.getElementById('btnParentNav').title = t('go_up');
         document.getElementById('btnParentNav').setAttribute('aria-label', t('go_up'));
+        document.getElementById('btnSelectionDownload').title = t('download');
         document.getElementById('btnSelectionCopy').title = t('copy');
         document.getElementById('btnSelectionCut').title = t('cut');
         document.getElementById('btnSelectionDelete').title = t('delete_label');
@@ -3652,6 +3663,7 @@ html, body {
         var selectBtn = document.getElementById('btnSelect');
         var selectionBar = document.getElementById('selectionBar');
         var selectionCount = document.getElementById('selectionCount');
+        var downloadBtn = document.getElementById('btnSelectionDownload');
         var copyBtn = document.getElementById('btnSelectionCopy');
         var cutBtn = document.getElementById('btnSelectionCut');
         var deleteBtn = document.getElementById('btnSelectionDelete');
@@ -3671,6 +3683,7 @@ html, body {
             selectionBar.classList.toggle('visible', showBar);
         }
 
+        if (downloadBtn) downloadBtn.disabled = !hasSelection;
         if (copyBtn) copyBtn.disabled = !hasSelection;
         if (cutBtn) cutBtn.disabled = !hasSelection;
         if (deleteBtn) deleteBtn.disabled = !hasSelection;
@@ -3722,6 +3735,13 @@ html, body {
         }));
         showToast(t('clipboard_cut_ready').replace('{count}', selectedPaths.length), 'success');
         window.cancelSelection();
+    };
+
+    window.downloadSelectedItems = function() {
+        if (!selectedPaths.length) return;
+        for (var i = 0; i < selectedPaths.length; i++) {
+            downloadFile(selectedPaths[i]);
+        }
     };
 
     window.pasteClipboardItems = async function() {
@@ -4079,88 +4099,219 @@ html, body {
         document.getElementById('dropzone').classList.toggle('visible', uploadZoneVisible);
     };
 
-    function processSelectedUploads(files) {
+    function createUploadProgressItem(displayName) {
+        var container = document.getElementById('uploadProgress');
+        var id = 'upload-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+        var item = document.createElement('div');
+        item.className = 'upload-item';
+        item.id = id;
+        item.innerHTML = '<span class="upload-item-name">' + escapeHtml(displayName) + '</span>' +
+            '<div class="progress-bar"><div class="progress-bar-fill" id="' + id + '-bar"></div></div>' +
+            '<span class="upload-item-status" id="' + id + '-status">0%</span>';
+        container.prepend(item);
+        return id;
+    }
+
+    function setUploadProgressPercent(id, pct) {
+        var safePct = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+        var bar = document.getElementById(id + '-bar');
+        var status = document.getElementById(id + '-status');
+        if (bar) {
+            bar.style.width = safePct + '%';
+            bar.classList.remove('complete', 'error');
+        }
+        if (status) {
+            status.textContent = safePct + '%';
+            status.classList.remove('success', 'error');
+        }
+    }
+
+    function setUploadProgressState(id, statusKey, className, barClassName) {
+        var bar = document.getElementById(id + '-bar');
+        var status = document.getElementById(id + '-status');
+        if (bar) {
+            bar.style.width = '100%';
+            bar.classList.remove('complete', 'error');
+            if (barClassName) {
+                bar.classList.add(barClassName);
+            }
+        }
+        if (status) {
+            status.textContent = t(statusKey);
+            status.classList.remove('success', 'error');
+            if (className) {
+                status.classList.add(className);
+            }
+        }
+    }
+
+    function getFolderUploadLabel(files) {
+        var first = files && files[0];
+        if (!first) return t('folder_label');
+        var relativePath = first.webkitRelativePath || '';
+        return relativePath.split('/')[0] || t('folder_label');
+    }
+
+    async function processSelectedUploads(files, preserveRelativePath) {
         if (!files || files.length === 0) return;
+        var uploadedCount = 0;
+        var failedCount = 0;
+        var batchId = null;
+        var batchLabel = null;
+        var batchState = null;
+
+        if (preserveRelativePath) {
+            batchLabel = getFolderUploadLabel(files);
+            batchId = createUploadProgressItem(batchLabel);
+            batchState = {
+                totalBytes: 0,
+                completedBytes: 0,
+            };
+            for (var bi = 0; bi < files.length; bi++) {
+                batchState.totalBytes += files[bi].size || 0;
+            }
+        }
+
         for (var fi = 0; fi < files.length; fi++) {
-            uploadFile(files[fi]);
+            var file = files[fi];
+            var relativePath = preserveRelativePath ? (file.webkitRelativePath || file.name || '') : '';
+            var uploadOk = await uploadFile({
+                file: file,
+                relativePath: relativePath,
+                displayName: relativePath || file.name,
+            }, batchState ? {
+                progressId: batchId,
+                batchState: batchState,
+                suppressSuccessToast: true,
+                suppressErrorToast: true,
+            } : null);
+            if (uploadOk) {
+                uploadedCount++;
+            } else {
+                failedCount++;
+            }
+        }
+
+        if (batchId) {
+            if (failedCount > 0) {
+                setUploadProgressState(batchId, 'failed', 'error', 'error');
+                showToast(t('upload_failed') + ' ' + batchLabel, 'error');
+            } else if (uploadedCount > 0) {
+                setUploadProgressState(batchId, 'done', 'success', 'complete');
+                showToast(batchLabel + ' ' + t('uploaded'), 'success');
+            }
+            setTimeout(function() {
+                var el = document.getElementById(batchId);
+                if (el) el.remove();
+            }, 3000);
+        }
+
+        if (uploadedCount > 0) {
+            closeUploadZone();
+            await loadFiles();
         }
     }
 
     window.handleFileSelect = function(files) {
-        processSelectedUploads(files);
+        processSelectedUploads(files, false).catch(function(err) {
+            showToast(err.message || t('upload_failed'), 'error');
+        });
         document.getElementById('fileInput').value = '';
     };
 
     window.handleFolderSelect = function(files) {
-        processSelectedUploads(files);
+        processSelectedUploads(files, true).catch(function(err) {
+            showToast(err.message || t('upload_failed'), 'error');
+        });
         document.getElementById('folderInput').value = '';
     };
 
-    async function uploadFile(file) {
-        var container = document.getElementById('uploadProgress');
-        var id = 'upload-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    function sendUploadRequest(id, uploadEntry, options) {
+        options = options || {};
+        var file = uploadEntry.file || uploadEntry;
+        var relativePath = uploadEntry.relativePath || '';
+        var batchState = options.batchState || null;
 
-        var item = document.createElement('div');
-        item.className = 'upload-item';
-        item.id = id;
-        item.innerHTML = '<span class="upload-item-name">' + escapeHtml(file.name) + '</span>' +
-            '<div class="progress-bar"><div class="progress-bar-fill" id="' + id + '-bar"></div></div>' +
-            '<span class="upload-item-status" id="' + id + '-status">0%</span>';
-        container.prepend(item);
-
-        try {
+        return new Promise(function(resolve, reject) {
             var formData = new FormData();
             formData.append('file', file);
+            if (relativePath) {
+                formData.append('relative_path', relativePath);
+            }
 
             var xhr = new XMLHttpRequest();
             xhr.open('POST', '/api/upload?path=' + encodeURIComponent(currentPath) + '&scope=' + encodeURIComponent(currentScope));
 
             xhr.upload.onprogress = function(e) {
-                if (e.lengthComputable) {
-                    var pct = Math.round((e.loaded / e.total) * 100);
-                    var bar = document.getElementById(id + '-bar');
-                    var status = document.getElementById(id + '-status');
-                    if (bar) bar.style.width = pct + '%';
-                    if (status) status.textContent = pct + '%';
+                if (!e.lengthComputable) return;
+                if (batchState) {
+                    var totalBytes = batchState.totalBytes || 1;
+                    var pct = ((batchState.completedBytes + e.loaded) / totalBytes) * 100;
+                    setUploadProgressPercent(id, pct);
+                } else {
+                    setUploadProgressPercent(id, (e.loaded / e.total) * 100);
                 }
             };
 
-            await new Promise(function(resolve, reject) {
-                xhr.onload = function() {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        resolve();
-                    } else {
-                        try {
-                            var d = JSON.parse(xhr.responseText);
-                            reject(new Error(d.error || t('upload_failed')));
-                        } catch(e) {
-                            reject(new Error(t('upload_failed')));
-                        }
-                    }
-                };
-                xhr.onerror = function() { reject(new Error(t('network_error'))); };
-                xhr.send(formData);
-            });
+            xhr.onload = function() {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve();
+                    return;
+                }
 
-            var bar = document.getElementById(id + '-bar');
-            var status = document.getElementById(id + '-status');
-            if (bar) { bar.style.width = '100%'; bar.classList.add('complete'); }
-            if (status) { status.textContent = t('done'); status.classList.add('success'); }
-            showToast(file.name + ' ' + t('uploaded'), 'success');
-            closeUploadZone();
-            loadFiles();
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    reject(new Error(data.error || t('upload_failed')));
+                } catch (e) {
+                    reject(new Error(t('upload_failed')));
+                }
+            };
 
-            setTimeout(function() {
-                var el = document.getElementById(id);
-                if (el) el.remove();
-            }, 3000);
+            xhr.onerror = function() {
+                reject(new Error(t('network_error')));
+            };
 
+            xhr.send(formData);
+        });
+    }
+
+    async function uploadFile(uploadEntry, options) {
+        options = options || {};
+        var file = uploadEntry.file || uploadEntry;
+        var displayName = uploadEntry.displayName || uploadEntry.relativePath || file.name;
+        var batchState = options.batchState || null;
+        var ownsProgressItem = !options.progressId;
+        var id = options.progressId || createUploadProgressItem(displayName);
+
+        try {
+            await sendUploadRequest(id, uploadEntry, options);
+            if (batchState) {
+                batchState.completedBytes += file.size || 0;
+                setUploadProgressPercent(id, (batchState.completedBytes / Math.max(batchState.totalBytes || 0, 1)) * 100);
+            } else {
+                setUploadProgressState(id, 'done', 'success', 'complete');
+            }
+
+            if (!options.suppressSuccessToast) {
+                showToast(displayName + ' ' + t('uploaded'), 'success');
+            }
+
+            if (ownsProgressItem) {
+                setTimeout(function() {
+                    var el = document.getElementById(id);
+                    if (el) el.remove();
+                }, 3000);
+            }
+
+            return true;
         } catch (err) {
-            var bar2 = document.getElementById(id + '-bar');
-            var status2 = document.getElementById(id + '-status');
-            if (bar2) { bar2.style.width = '100%'; bar2.classList.add('error'); }
-            if (status2) { status2.textContent = t('failed'); status2.classList.add('error'); }
-            showToast(t('upload_failed') + ' ' + err.message, 'error');
+            if (ownsProgressItem) {
+                setUploadProgressState(id, 'failed', 'error', 'error');
+            }
+            if (!options.suppressErrorToast) {
+                showToast(t('upload_failed') + ' ' + err.message, 'error');
+            }
+            return false;
         }
     }
 

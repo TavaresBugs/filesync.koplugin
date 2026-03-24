@@ -683,10 +683,109 @@ function FileOps:downloadFile(client, rel_path, server, inline, options)
     return false, "Unsupported entry type", 400
 end
 
+function FileOps:_normalizeUploadRelativePath(relative_path, fallback_filename)
+    local normalized = tostring(relative_path or fallback_filename or "")
+    normalized = normalized:gsub("\\", "/")
+    normalized = normalized:gsub("//+", "/")
+    normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+    normalized = normalized:gsub("^/+", ""):gsub("/+$", "")
+
+    if normalized == "" then
+        return nil, "Empty upload path"
+    end
+
+    if normalized:match("%.%.") then
+        return nil, "Path traversal not allowed"
+    end
+
+    local segments = {}
+    for segment in normalized:gmatch("[^/]+") do
+        local valid, valid_err = self:_validateFilename(segment)
+        if not valid then
+            return nil, valid_err
+        end
+        table.insert(segments, segment)
+    end
+
+    if #segments == 0 then
+        return nil, "Empty upload path"
+    end
+
+    if fallback_filename then
+        segments[#segments] = fallback_filename
+    end
+
+    return table.concat(segments, "/")
+end
+
+function FileOps:_collectUploadDirectories(full_dir_path, pending_dirs, scope_root)
+    scope_root = normalize_root_path(scope_root or self._root_dir)
+
+    if not full_dir_path or full_dir_path == "" or full_dir_path == scope_root then
+        return true
+    end
+
+    if not is_path_within_root(full_dir_path, scope_root) then
+        return false, "Access denied: path outside root directory"
+    end
+
+    local rel = full_dir_path:sub(#scope_root + 1):gsub("^/+", "")
+    if rel == "" then
+        return true
+    end
+
+    local current = scope_root
+    for segment in rel:gmatch("[^/]+") do
+        local valid, valid_err = self:_validateFilename(segment)
+        if not valid then
+            return false, valid_err
+        end
+
+        current = current .. "/" .. segment
+        local attr = lfs.attributes(current)
+        if attr then
+            if attr.mode ~= "directory" then
+                return false, "Cannot create directory: path component is not a directory"
+            end
+        else
+            pending_dirs[current] = true
+        end
+    end
+
+    return true
+end
+
+function FileOps:_createPendingDirectories(pending_dirs)
+    local paths = {}
+    for path in pairs(pending_dirs) do
+        table.insert(paths, path)
+    end
+
+    table.sort(paths, function(a, b)
+        return #a < #b
+    end)
+
+    for _, path in ipairs(paths) do
+        local attr = lfs.attributes(path)
+        if attr then
+            if attr.mode ~= "directory" then
+                return false, "Cannot create directory: path component is not a directory"
+            end
+        else
+            local ok, mkdir_err = lfs.mkdir(path)
+            if not ok then
+                return false, "Cannot create directory: " .. tostring(mkdir_err)
+            end
+        end
+    end
+
+    return true
+end
+
 --- Handle multipart file upload
 function FileOps:handleUpload(rel_dir, body, boundary, options)
     options = options or {}
-    local dir_path, err = self:_resolvePath(rel_dir, {
+    local dir_path, err, scope = self:_resolvePath(rel_dir, {
         scope = options.scope,
         allow_root_scopes = options.allow_root_scopes == true,
     })
@@ -722,52 +821,121 @@ function FileOps:handleUpload(rel_dir, body, boundary, options)
         search_start = next_boundary
     end
 
-    local uploaded_count = 0
+    local form_fields = {}
+    local upload_entries = {}
     for _, part in ipairs(parts) do
-        -- Split headers from body
         local header_end = part:find("\r\n\r\n", 1, true)
         if header_end then
             local headers_str = part:sub(1, header_end - 1)
             local file_data = part:sub(header_end + 4)
+            local field_name = headers_str:match('name="([^"]+)"')
 
-            -- Extract filename from Content-Disposition
             local filename = headers_str:match('filename="([^"]+)"')
             if filename and filename ~= "" then
-                -- Clean up filename (remove path components from some browsers)
                 filename = filename:match("([^/\\]+)$") or filename
 
-                -- Fix iOS Safari appending .zip to EPUB/CBZ files (they are ZIP-based)
                 if filename:match("%.epub%.zip$") then
                     filename = filename:gsub("%.zip$", "")
                 elseif filename:match("%.cbz%.zip$") then
                     filename = filename:gsub("%.zip$", "")
                 end
 
-                -- Validate filename
                 local valid, valid_err = self:_validateFilename(filename)
                 if valid then
-                    local file_path = dir_path .. "/" .. filename
-                    local f = io.open(file_path, "wb")
-                    if f then
-                        f:write(file_data)
-                        f:close()
-                        uploaded_count = uploaded_count + 1
-                        logger.info("FileSync: Uploaded", filename, "to", dir_path)
-                    else
-                        logger.warn("FileSync: Cannot write file", file_path)
+                    if options.safe_mode and not self:isExtensionSafe(filename) then
+                        return false, "Root mode required for this file type"
                     end
+                    table.insert(upload_entries, {
+                        filename = filename,
+                        data = file_data,
+                    })
                 else
                     logger.warn("FileSync: Invalid filename:", filename, valid_err)
                 end
+            elseif field_name and field_name ~= "" then
+                form_fields[field_name] = file_data:gsub("\r\n$", "")
             end
         end
     end
 
-    if uploaded_count > 0 then
-        return true
-    else
+    if #upload_entries == 0 then
         return false, "No files were uploaded"
     end
+
+    local normalized_rel_dir = tostring(rel_dir or "/"):gsub("//+", "/"):gsub("^%s+", ""):gsub("%s+$", "")
+    if normalized_rel_dir == "" then
+        normalized_rel_dir = "/"
+    end
+    if normalized_rel_dir:sub(1, 1) ~= "/" then
+        normalized_rel_dir = "/" .. normalized_rel_dir
+    end
+    if normalized_rel_dir ~= "/" and normalized_rel_dir:sub(-1) == "/" then
+        normalized_rel_dir = normalized_rel_dir:sub(1, -2)
+    end
+
+    local pending_dirs = {}
+    local prepared_entries = {}
+    for _, entry in ipairs(upload_entries) do
+        local upload_rel_path, path_err = self:_normalizeUploadRelativePath(form_fields.relative_path, entry.filename)
+        if not upload_rel_path then
+            return false, path_err
+        end
+
+        local target_rel_path = normalized_rel_dir == "/"
+            and ("/" .. upload_rel_path)
+            or (normalized_rel_dir .. "/" .. upload_rel_path)
+        local target_full_path, target_err = self:_resolvePath(target_rel_path, {
+            scope = options.scope,
+            allow_root_scopes = options.allow_root_scopes == true,
+        })
+        if not target_full_path then
+            return false, target_err
+        end
+
+        local parent_dir = target_full_path:match("(.+)/[^/]+$") or dir_path
+        local ok_dirs, dir_err = self:_collectUploadDirectories(parent_dir, pending_dirs, scope.root_path)
+        if not ok_dirs then
+            return false, dir_err
+        end
+
+        table.insert(prepared_entries, {
+            full_path = target_full_path,
+            relative_path = upload_rel_path,
+            data = entry.data,
+        })
+    end
+
+    local ok_dirs, dir_err = self:_createPendingDirectories(pending_dirs)
+    if not ok_dirs then
+        return false, dir_err
+    end
+
+    local uploaded_count = 0
+    for _, entry in ipairs(prepared_entries) do
+        local f = io.open(entry.full_path, "wb")
+        if f then
+            local write_ok, write_err = f:write(entry.data)
+            local close_ok, close_err = f:close()
+            if write_ok and close_ok ~= false then
+                uploaded_count = uploaded_count + 1
+                logger.info("FileSync: Uploaded", entry.relative_path, "to", dir_path)
+            else
+                logger.warn("FileSync: Cannot write file", entry.full_path, write_err or close_err)
+            end
+        else
+            logger.warn("FileSync: Cannot write file", entry.full_path)
+        end
+    end
+
+    if uploaded_count == #prepared_entries then
+        return true
+    end
+
+    if uploaded_count > 0 then
+        return false, "Some files could not be uploaded"
+    end
+
+    return false, "No files were uploaded"
 end
 
 --- Create a directory

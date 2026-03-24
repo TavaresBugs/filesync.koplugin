@@ -248,6 +248,22 @@ html, body {
     align-items: center;
 }
 
+.header-actions .btn-secondary {
+    transition: background-color var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition), transform var(--transition), opacity var(--transition);
+}
+
+.header-actions .btn-secondary:hover:not(:disabled) {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.18);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+}
+
+.header-actions .btn-secondary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
 .theme-toggle {
     width: 32px;
     min-width: 32px;
@@ -5698,6 +5714,32 @@ html, body {
 
         event.preventDefault();
         window.pasteClipboardItems();
+    });
+
+    document.addEventListener('keydown', function(event) {
+        var pressedC = event.key === 'c' || event.key === 'C';
+        if (!pressedC || (!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) {
+            return;
+        }
+        if (isEditableTarget(event.target) || !selectionMode || !selectedPaths.length) {
+            return;
+        }
+
+        event.preventDefault();
+        window.copySelectedItems();
+    });
+
+    document.addEventListener('keydown', function(event) {
+        var pressedX = event.key === 'x' || event.key === 'X';
+        if (!pressedX || (!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) {
+            return;
+        }
+        if (isEditableTarget(event.target) || !selectionMode || !selectedPaths.length) {
+            return;
+        }
+
+        event.preventDefault();
+        window.cutSelectedItems();
     });
 
     // ===== Init =====

@@ -1,4 +1,5 @@
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local T = require("ffi/util").template
 local ok_i18n, plugin_gettext = pcall(require, "filesync/filesync_i18n")
 local _ = ok_i18n and plugin_gettext or require("gettext")
 
@@ -45,7 +46,10 @@ function FileSync:addToMainMenu(menu_items)
                 keep_menu_open = true,
             },
             {
-                text = _("Server port"),
+                text_func = function()
+                    local FileSyncManager = require("filesync/filesyncmanager")
+                    return T(_("Server port (%1)"), FileSyncManager:getPort())
+                end,
                 callback = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
                     FileSyncManager:configurePort()

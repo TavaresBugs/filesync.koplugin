@@ -3392,9 +3392,8 @@ html, body {
         if (storedTheme) {
             return storedTheme;
         }
-        var currentTheme = normalizeThemePreference(document.documentElement.getAttribute("data-theme"));
-        if (currentTheme) {
-            return currentTheme;
+        if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            return "dark";
         }
         return "light";
     }
@@ -3429,6 +3428,19 @@ html, body {
         setStoredThemePreference(nextTheme);
     }
 
+    function syncThemeWithSystemPreference(event) {
+        if (getStoredThemePreference()) {
+            return;
+        }
+
+        var prefersDark = !!(event && event.matches);
+        if (!event && window.matchMedia) {
+            prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        }
+
+        applyThemePreference(prefersDark ? "dark" : "light");
+    }
+
     function initTheme() {
         applyThemePreference(getInitialThemePreference());
 
@@ -3436,6 +3448,14 @@ html, body {
         if (button && !button._filesyncThemeBound) {
             button.addEventListener("click", toggleThemePreference);
             button._filesyncThemeBound = true;
+        }
+
+        if (window.matchMedia && !window._filesyncThemeMediaQueryBound) {
+            var mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+            if (mediaQuery.addEventListener) {
+                mediaQuery.addEventListener("change", syncThemeWithSystemPreference);
+                window._filesyncThemeMediaQueryBound = true;
+            }
         }
     }
 

@@ -3383,7 +3383,7 @@ html, body {
             var attrs = isLast ? '' : ' onclick="navigate(\'' + escapeAttr(crumbs[i].path) + '\', \'' + escapeAttr(currentScope) + '\')"';
             if (displayName === "Home") {
                 html += '<span class="' + classes + ' breadcrumb-home"' + attrs + ' title="' + escapeHtml(t('home')) + '" aria-label="' + escapeHtml(t('home')) + '">' +
-                    icons.home + '<span class="breadcrumb-home-label">' + escapeHtml(t('home')) + '</span></span>';
+                    icons.home + '</span>';
                 continue;
             }
             html += '<span class="' + classes + '"' + attrs + '>' + escapeHtml(displayName) + '</span>';

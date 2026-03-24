@@ -610,9 +610,7 @@ function FileOps:_createDirectoryArchive(full_path, safe_mode, scope_root)
     end
 
     local entry_name = full_path:match("([^/]+)$") or "download"
-    local archive_name = entry_name .. ".zip"
     local temp_root = string.format("/tmp/filesync-download-%d-%d", os.time(), math.random(10000, 99999))
-    local archive_path = temp_root .. "/" .. archive_name
     local zip_parent = full_path:match("(.+)/[^/]+$") or "/"
     local zip_target = entry_name
 
@@ -639,17 +637,43 @@ function FileOps:_createDirectoryArchive(full_path, safe_mode, scope_root)
         zip_parent = stage_root
     end
 
+    local archive_name = entry_name .. ".zip"
+    local archive_path = temp_root .. "/" .. archive_name
     local zip_cmd = "cd " .. self:_shellEscape(zip_parent)
         .. " && zip -qr " .. self:_shellEscape(archive_path) .. " " .. self:_shellEscape(zip_target) .. " 2>/dev/null"
     local zip_ok, zip_err = self:_runShellCommand(zip_cmd)
-    if not zip_ok then
-        logger.warn("FileSync: Failed to create directory archive", full_path, zip_err)
-        self:_removeTempPath(temp_root)
-        return nil, nil, nil, "Cannot create folder archive"
+    if zip_ok then
+        logger.info("FileSync: Created zip download archive", archive_path, "for", full_path)
+        return archive_path, archive_name, temp_root, nil, nil, "application/zip"
     end
 
-    logger.info("FileSync: Created download archive", archive_path, "for", full_path)
-    return archive_path, archive_name, temp_root
+    logger.warn("FileSync: zip archive creation failed, trying tar.gz fallback", full_path, zip_err)
+
+    archive_name = entry_name .. ".tar.gz"
+    archive_path = temp_root .. "/" .. archive_name
+    local tar_gz_cmd = "cd " .. self:_shellEscape(zip_parent)
+        .. " && tar -czf " .. self:_shellEscape(archive_path) .. " " .. self:_shellEscape(zip_target) .. " 2>/dev/null"
+    local tar_gz_ok, tar_gz_err = self:_runShellCommand(tar_gz_cmd)
+    if tar_gz_ok then
+        logger.info("FileSync: Created tar.gz download archive", archive_path, "for", full_path)
+        return archive_path, archive_name, temp_root, nil, nil, "application/gzip"
+    end
+
+    logger.warn("FileSync: tar.gz archive creation failed, trying tar fallback", full_path, tar_gz_err)
+
+    archive_name = entry_name .. ".tar"
+    archive_path = temp_root .. "/" .. archive_name
+    local tar_cmd = "cd " .. self:_shellEscape(zip_parent)
+        .. " && tar -cf " .. self:_shellEscape(archive_path) .. " " .. self:_shellEscape(zip_target) .. " 2>/dev/null"
+    local tar_ok, tar_err = self:_runShellCommand(tar_cmd)
+    if tar_ok then
+        logger.info("FileSync: Created tar download archive", archive_path, "for", full_path)
+        return archive_path, archive_name, temp_root, nil, nil, "application/x-tar"
+    end
+
+    logger.warn("FileSync: Failed to create directory archive", full_path, tar_err or tar_gz_err or zip_err)
+    self:_removeTempPath(temp_root)
+    return nil, nil, nil, "Cannot create folder archive"
 end
 
 --- Download a file, sending it directly to the client socket
@@ -679,12 +703,12 @@ function FileOps:downloadFile(client, rel_path, server, inline, options)
     end
 
     if attr.mode == "directory" then
-        local archive_path, archive_name, cleanup_path, archive_err, status_code =
+        local archive_path, archive_name, cleanup_path, archive_err, status_code, archive_mime =
             self:_createDirectoryArchive(full_path, safe_mode, scope.root_path)
         if not archive_path then
             return false, archive_err, status_code or 400
         end
-        return self:_streamDownload(client, archive_path, server, false, archive_name, "application/zip", cleanup_path)
+        return self:_streamDownload(client, archive_path, server, false, archive_name, archive_mime or "application/zip", cleanup_path)
     end
 
     return false, "Unsupported entry type", 400

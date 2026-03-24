@@ -364,9 +364,18 @@ function FileSyncManager:showQRCode()
         local icon_dir = source:match("@(.*/)") or ""
         if icon_dir ~= "" then
             local icon_size = Screen:scaleBySize(46)
+            local icon_file = icon_dir .. "icon.png"
+            if Screen.night_mode then
+                local dark_icon_file = icon_dir .. "icon_dark.png"
+                local dark_icon_handle = io.open(dark_icon_file, "rb")
+                if dark_icon_handle then
+                    dark_icon_handle:close()
+                    icon_file = dark_icon_file
+                end
+            end
             local ok_icon, icon_widget = pcall(function()
                 return ImageWidget:new{
-                    file = icon_dir .. "icon.png",
+                    file = icon_file,
                     width = icon_size,
                     height = icon_size,
                     alpha = true,

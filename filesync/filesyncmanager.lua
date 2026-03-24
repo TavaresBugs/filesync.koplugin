@@ -73,6 +73,35 @@ function FileSyncManager:buildURL(ip, port)
     return "http://" .. ip .. ":" .. port
 end
 
+function FileSyncManager:_isPortInUseError(err)
+    local message = tostring(err):lower()
+    return message:find("address already in use", 1, true)
+        or message:find("already in use", 1, true)
+end
+
+function FileSyncManager:_formatStartError(err, ip, port)
+    local message = tostring(err)
+    local lower = message:lower()
+
+    if self:_isPortInUseError(message) then
+        if port == 80 and ip then
+            return T(_("FileSync could not use the default address %1 because another service is already using port %2.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."), self:buildURL(ip, port), port)
+        end
+
+        return T(_("Failed to start server on port %1.\n\nAnother service is already using this port.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."), port)
+    end
+
+    if port < 1024 and (
+        lower:find("permission denied", 1, true)
+        or lower:find("access denied", 1, true)
+        or lower:find("operation not permitted", 1, true)
+    ) then
+        return T(_("Failed to start server on port %1.\n\nThis port may require root or admin privileges on this device.\n\nTry changing the Server Port setting to 8080 or higher."), port)
+    end
+
+    return T(_("Failed to start server: %1"), message)
+end
+
 function FileSyncManager:_stopWifiMonitor()
     self._wifi_monitor_active = false
     self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
@@ -306,7 +335,7 @@ function FileSyncManager:start(silent)
         logger.err("FileSync: Failed to start server:", err)
         if not silent then
             UIManager:show(InfoMessage:new{
-                text = T(_("Failed to start server: %1"), tostring(err)),
+                text = self:_formatStartError(err, ip, port),
                 timeout = 5,
             })
         end

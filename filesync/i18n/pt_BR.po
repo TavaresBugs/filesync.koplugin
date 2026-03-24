@@ -61,6 +61,15 @@ msgstr "Não foi possível identificar o endereço IP do dispositivo. Certifique
 msgid "Failed to start server: %1"
 msgstr "Erro ao iniciar o servidor: %1"
 
+msgid "FileSync could not use the default address %1 because another service is already using port %2.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."
+msgstr "O FileSync nao conseguiu usar o endereco padrao %1 porque outro servico ja esta usando a porta %2.\n\nPare o outro servico ou altere a configuracao Porta do servidor para outra porta livre, como 8080."
+
+msgid "Failed to start server on port %1.\n\nAnother service is already using this port.\n\nStop the other service, or change the Server Port setting to another free port such as 8080."
+msgstr "Nao foi possivel iniciar o servidor na porta %1.\n\nOutro servico ja esta usando essa porta.\n\nPare o outro servico ou altere a configuracao Porta do servidor para outra porta livre, como 8080."
+
+msgid "Failed to start server on port %1.\n\nThis port may require root or admin privileges on this device.\n\nTry changing the Server Port setting to 8080 or higher."
+msgstr "Nao foi possivel iniciar o servidor na porta %1.\n\nEssa porta pode exigir privilegios de root ou administrador neste dispositivo.\n\nTente alterar a configuracao Porta do servidor para 8080 ou maior."
+
 msgid "FileSync server stopped."
 msgstr "Servidor FileSync parado."
 

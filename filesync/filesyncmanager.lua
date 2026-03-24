@@ -60,6 +60,13 @@ function FileSyncManager:setSafeMode(enabled)
     G_reader_settings:flush()
 end
 
+function FileSyncManager:buildURL(ip, port)
+    if port == 80 then
+        return "http://" .. ip
+    end
+    return "http://" .. ip .. ":" .. port
+end
+
 function FileSyncManager:configurePort()
     local InputDialog = require("ui/widget/inputdialog")
     local port_dialog
@@ -232,20 +239,22 @@ function FileSyncManager:start(silent)
     self._ip = ip
     self._port = port
     self:preventStandby()
-    logger.info("FileSync: Server started on", ip .. ":" .. port)
+    logger.info("FileSync: Server started on", self:buildURL(ip, port))
 
     if not silent then
         self:showQRCode()
     end
 end
 
-function FileSyncManager:stop(silent)
-    if not self._running then
+function FileSyncManager:stop(silent, keep_qr_screen)
+    if not self._running and not self._server and not self._standby_prevented then
         return
     end
 
     -- Close QR screen if open
-    self:closeQRScreen()
+    if not keep_qr_screen then
+        self:closeQRScreen()
+    end
 
     if self._server then
         pcall(function()
@@ -268,7 +277,6 @@ function FileSyncManager:stop(silent)
             text = _("FileSync server stopped."),
             timeout = 2,
         })
-        UIManager:restartKOReader()
     end
 end
 
@@ -340,7 +348,7 @@ function FileSyncManager:showQRCode()
     local ok, err = pcall(function()
         self:closeQRScreen()
 
-        local url = "http://" .. self._ip .. ":" .. self._port
+        local url = self:buildURL(self._ip, self._port)
         local screen_width = Screen:getWidth()
         local screen_height = Screen:getHeight()
         local full_screen_dimen = Geom:new{ x = 0, y = 0, w = screen_width, h = screen_height }
@@ -522,15 +530,7 @@ function FileSyncManager:showQRCode()
             if stop_btn and stop_btn.dimen then
                 if x >= stop_btn.dimen.x and x <= stop_btn.dimen.x + stop_btn.dimen.w
                    and y >= stop_btn.dimen.y and y <= stop_btn.dimen.y + stop_btn.dimen.h then
-                    self._manager:closeQRScreen()
-                    UIManager:show(InfoMessage:new{
-                        text = _("Stopping server..."),
-                        timeout = 2,
-                    })
-                    UIManager:scheduleIn(0.5, function()
-                        self._manager:stop(true)
-                        UIManager:restartKOReader()
-                    end)
+                    self._manager:stop(false, true)
                     return true
                 end
             end

@@ -17,13 +17,10 @@ function FileSync:addToMainMenu(menu_items)
         sorting_hint = "network",
         sub_item_table = {
             {
-                text_func = function()
+                text = _("Server status"),
+                checked_func = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
-                    if FileSyncManager:isRunning() then
-                        return _("Stop file server")
-                    else
-                        return _("Start file server")
-                    end
+                    return FileSyncManager:isRunning()
                 end,
                 callback = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
@@ -32,14 +29,6 @@ function FileSync:addToMainMenu(menu_items)
                     else
                         FileSyncManager:checkBatteryAndStart()
                     end
-                end,
-                keep_menu_open = false,
-            },
-            {
-                text = _("Server port"),
-                callback = function()
-                    local FileSyncManager = require("filesync/filesyncmanager")
-                    FileSyncManager:configurePort()
                 end,
                 keep_menu_open = true,
             },
@@ -56,14 +45,22 @@ function FileSync:addToMainMenu(menu_items)
                 keep_menu_open = true,
             },
             {
-                text = _("Show QR code"),
-                enabled_func = function()
+                text = _("Server port"),
+                callback = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
-                    return FileSyncManager:isRunning()
+                    FileSyncManager:configurePort()
                 end,
+                keep_menu_open = true,
+            },
+            {
+                text = _("Show QR code"),
                 callback = function()
                     local FileSyncManager = require("filesync/filesyncmanager")
                     FileSyncManager:showQRCode()
+                end,
+                enabled_func = function()
+                    local FileSyncManager = require("filesync/filesyncmanager")
+                    return FileSyncManager:isRunning()
                 end,
                 keep_menu_open = false,
             },

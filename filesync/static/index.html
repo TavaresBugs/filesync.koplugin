@@ -1462,6 +1462,10 @@ html, body {
     color: var(--success);
 }
 
+.upload-item-status.info {
+    color: var(--primary);
+}
+
 .upload-item-status.error {
     color: var(--danger);
 }
@@ -1483,6 +1487,10 @@ html, body {
 
 .progress-bar-fill.complete {
     background: var(--success);
+}
+
+.progress-bar-fill.skipped {
+    background: var(--primary);
 }
 
 .progress-bar-fill.error {
@@ -1879,6 +1887,98 @@ html, body {
 .modal-close-btn:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px var(--focus-ring), var(--shadow-md);
+}
+
+.modal-subtitle {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    white-space: pre-line;
+}
+
+.conflict-modal-title-row {
+    display: block;
+}
+
+.conflict-modal-title-row .modal-title {
+    margin-bottom: 16px;
+    padding-right: 32px;
+}
+
+.conflict-message {
+    white-space: pre-line;
+}
+
+#conflictOverlay .modal {
+    position: relative;
+    overflow: visible;
+}
+
+.conflict-close {
+    position: absolute;
+    top: -12px;
+    right: -12px;
+    width: 42px;
+    height: 42px;
+    border: 2px solid var(--surface);
+    border-radius: 999px;
+    background: var(--danger);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), color var(--transition), transform var(--transition);
+    box-shadow: var(--shadow-md);
+    z-index: 2;
+}
+
+.conflict-close svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.conflict-close:hover {
+    background: var(--danger-hover);
+    transform: scale(1.04);
+}
+
+.conflict-apply {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.conflict-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.conflict-actions .btn {
+    flex: 1 1 140px;
+}
+
+.btn-skip {
+    background: var(--primary-light);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    color: var(--primary);
+}
+
+.btn-skip:hover {
+    background: rgba(59, 130, 246, 0.12);
 }
 /* ===== Toast Notifications ===== */
 .toast-container {
@@ -2448,6 +2548,28 @@ html, body {
     </div>
 </div>
 
+<!-- Conflict Modal Overlay -->
+<div class="modal-overlay" id="conflictOverlay" onclick="closeConflictOverlay(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-handle"></div>
+        <div class="conflict-modal-title-row">
+            <div class="modal-title" id="conflictTitle"></div>
+            <button class="conflict-close" id="conflictCloseBtn" type="button" onclick="closeConflictDialogButton(event)" aria-label="Cancel" title="Cancel">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <p class="modal-subtitle conflict-message" id="conflictMessageText"></p>
+        <label class="conflict-apply" id="conflictApplyLabel">
+            <input type="checkbox" id="conflictApplyAll">
+            <span id="conflictApplyText"></span>
+        </label>
+        <div class="conflict-actions" id="conflictActions"></div>
+    </div>
+</div>
+
 <!-- File Detail View -->
 <div class="file-detail" id="fileDetail">
     <div class="detail-header">
@@ -2551,6 +2673,18 @@ html, body {
             new_folder_title: "New folder",
             also_delete_sdr: "Also delete reading metadata (.sdr)",
             image_preview: "Image preview",
+            replace_existing: "Replace",
+            merge_replace: "Merge and Replace",
+            skip_item: "Skip",
+            skipped: "Skipped",
+            skipped_count: "{count} items skipped",
+            conflict_file_title: "File already exists",
+            conflict_folder_title: "Folder already exists",
+            conflict_file_message: "The file \"{name}\" already exists in this location.",
+            conflict_folder_message: "The folder \"{name}\" already exists in this location.",
+            conflict_replace_hint: "Choose whether to replace the existing item, skip it, or cancel the operation.",
+            conflict_merge_hint: "Choose whether to merge with the existing folder, replace it, skip it, or cancel the operation.",
+            conflict_apply_all: "Apply this choice to all remaining conflicts",
             paste_success: "{count} items pasted",
             paste_failed: "Paste failed:",
             cut_placeholder: "Cut is ready. Paste will be implemented next",
@@ -2645,6 +2779,18 @@ html, body {
             new_folder_title: "Nueva carpeta",
             also_delete_sdr: "Tambi\u00e9n eliminar metadatos de lectura (.sdr)",
             image_preview: "Vista previa de imagen",
+            replace_existing: "Reemplazar",
+            merge_replace: "Combinar y reemplazar",
+            skip_item: "Omitir",
+            skipped: "Omitido",
+            skipped_count: "{count} elementos omitidos",
+            conflict_file_title: "El archivo ya existe",
+            conflict_folder_title: "La carpeta ya existe",
+            conflict_file_message: "El archivo \"{name}\" ya existe en esta ubicaci\u00f3n.",
+            conflict_folder_message: "La carpeta \"{name}\" ya existe en esta ubicaci\u00f3n.",
+            conflict_replace_hint: "Elige si deseas reemplazar el elemento existente, omitirlo o cancelar la operaci\u00f3n.",
+            conflict_merge_hint: "Elige si deseas combinar con la carpeta existente, reemplazarla, omitirla o cancelar la operaci\u00f3n.",
+            conflict_apply_all: "Aplicar esta opci\u00f3n a todos los conflictos restantes",
             paste_success: "{count} elementos pegados",
             paste_failed: "Error al pegar:",
             cut_placeholder: "Cortar est\u00e1 listo. Pegar se implementar\u00e1 despu\u00e9s",
@@ -2739,6 +2885,18 @@ html, body {
             new_folder_title: "Nova pasta",
             also_delete_sdr: "Excluir tamb\u00e9m os metadados de leitura (.sdr)",
             image_preview: "Pr\u00e9via de imagem",
+            replace_existing: "Substituir",
+            merge_replace: "Mesclar e substituir",
+            skip_item: "Pular",
+            skipped: "Pulado",
+            skipped_count: "{count} itens pulados",
+            conflict_file_title: "O arquivo j\u00e1 existe",
+            conflict_folder_title: "A pasta j\u00e1 existe",
+            conflict_file_message: "O arquivo \"{name}\" j\u00e1 existe neste local.",
+            conflict_folder_message: "A pasta \"{name}\" j\u00e1 existe neste local.",
+            conflict_replace_hint: "Escolha se deseja substituir o item existente, pular este item ou cancelar a opera\u00e7\u00e3o.",
+            conflict_merge_hint: "Escolha se deseja mesclar com a pasta existente, substitu\u00ed-la, pular este item ou cancelar a opera\u00e7\u00e3o.",
+            conflict_apply_all: "Aplicar esta escolha a todos os conflitos restantes",
             paste_success: "{count} itens colados",
             paste_failed: "Erro ao colar:",
             cut_placeholder: "Recortar j\u00e1 est\u00e1 pronto. Colar ser\u00e1 implementado em seguida",
@@ -2820,6 +2978,18 @@ html, body {
             new_folder_title: "新建文件夹",
             also_delete_sdr: "同时删除阅读元数据（.sdr）",
             image_preview: "图片预览",
+            replace_existing: "替换",
+            merge_replace: "合并并替换",
+            skip_item: "跳过",
+            skipped: "已跳过",
+            skipped_count: "已跳过 {count} 项",
+            conflict_file_title: "文件已存在",
+            conflict_folder_title: "文件夹已存在",
+            conflict_file_message: "文件“{name}”已存在于此位置。",
+            conflict_folder_message: "文件夹“{name}”已存在于此位置。",
+            conflict_replace_hint: "选择替换现有项目、跳过或取消操作。",
+            conflict_merge_hint: "选择与现有文件夹合并、替换、跳过或取消操作。",
+            conflict_apply_all: "将此选择应用到所有剩余冲突",
             storage_scope: "存储",
             system_scope: "系统",
             show_hidden_files: "显示隐藏项",
@@ -3152,6 +3322,24 @@ html, body {
     }
 
     // ===== API =====
+    function createApiErrorFromData(data, status, fallbackMessage) {
+        var apiError = new Error((data && data.error) || fallbackMessage || t('request_failed') + ' (' + status + ')');
+        apiError.code = data && data.code;
+        apiError.status = status;
+        apiError.sourceType = data && data.source_type;
+        apiError.destinationType = data && data.destination_type;
+        apiError.destinationPath = data && data.destination_path;
+        apiError.canMerge = !!(data && data.can_merge);
+        apiError.details = data || {};
+        return apiError;
+    }
+
+    function createConnectionError() {
+        var connectionError = new Error(t('network_error'));
+        connectionError.code = 'network_error';
+        return connectionError;
+    }
+
     async function api(method, url, body) {
         var opts = { method: method };
         if (body instanceof FormData) {
@@ -3160,7 +3348,12 @@ html, body {
             opts.headers = { 'Content-Type': 'application/json' };
             opts.body = JSON.stringify(body);
         }
-        var res = await fetch(url, opts);
+        var res;
+        try {
+            res = await fetch(url, opts);
+        } catch (err) {
+            throw createConnectionError();
+        }
         var text = await res.text();
         var data;
         try {
@@ -3169,7 +3362,7 @@ html, body {
             throw new Error(res.ok ? t('invalid_server_response') : t('server_error') + ' (' + res.status + ')');
         }
         if (!res.ok || data.error) {
-            throw new Error(data.error || t('request_failed') + ' (' + res.status + ')');
+            throw createApiErrorFromData(data, res.status, t('request_failed') + ' (' + res.status + ')');
         }
         return data;
     }
@@ -4211,11 +4404,11 @@ html, body {
         var status = document.getElementById(id + '-status');
         if (bar) {
             bar.style.width = safePct + '%';
-            bar.classList.remove('complete', 'error');
+            bar.classList.remove('complete', 'error', 'skipped');
         }
         if (status) {
             status.textContent = safePct + '%';
-            status.classList.remove('success', 'error');
+            status.classList.remove('success', 'error', 'info');
         }
     }
 
@@ -4224,14 +4417,14 @@ html, body {
         var status = document.getElementById(id + '-status');
         if (bar) {
             bar.style.width = '100%';
-            bar.classList.remove('complete', 'error');
+            bar.classList.remove('complete', 'error', 'skipped');
             if (barClassName) {
                 bar.classList.add(barClassName);
             }
         }
         if (status) {
             status.textContent = t(statusKey);
-            status.classList.remove('success', 'error');
+            status.classList.remove('success', 'error', 'info');
             if (className) {
                 status.classList.add(className);
             }
@@ -4249,9 +4442,11 @@ html, body {
         if (!files || files.length === 0) return;
         var uploadedCount = 0;
         var failedCount = 0;
+        var skippedCount = 0;
         var batchId = null;
         var batchLabel = null;
         var batchState = null;
+        var conflictState = { action: null, cancelled: false };
 
         if (preserveRelativePath) {
             batchLabel = getFolderUploadLabel(files);
@@ -4268,18 +4463,22 @@ html, body {
         for (var fi = 0; fi < files.length; fi++) {
             var file = files[fi];
             var relativePath = preserveRelativePath ? (file.webkitRelativePath || file.name || '') : '';
-            var uploadOk = await uploadFile({
+            var uploadResult = await uploadFile({
                 file: file,
                 relativePath: relativePath,
                 displayName: relativePath || file.name,
-            }, batchState ? {
+            }, conflictState, batchState ? {
                 progressId: batchId,
                 batchState: batchState,
                 suppressSuccessToast: true,
                 suppressErrorToast: true,
             } : null);
-            if (uploadOk) {
+            if (uploadResult === 'uploaded') {
                 uploadedCount++;
+            } else if (uploadResult === 'skipped') {
+                skippedCount++;
+            } else if (uploadResult === 'cancelled') {
+                break;
             } else {
                 failedCount++;
             }
@@ -4292,6 +4491,8 @@ html, body {
             } else if (uploadedCount > 0) {
                 setUploadProgressState(batchId, 'done', 'success', 'complete');
                 showToast(batchLabel + ' ' + t('uploaded'), 'success');
+            } else if (skippedCount > 0) {
+                setUploadProgressState(batchId, 'skipped', 'info', 'skipped');
             }
             setTimeout(function() {
                 var el = document.getElementById(batchId);
@@ -4319,7 +4520,7 @@ html, body {
         document.getElementById('folderInput').value = '';
     };
 
-    function sendUploadRequest(id, uploadEntry, options) {
+    function sendUploadRequest(id, uploadEntry, conflictStrategy, options) {
         options = options || {};
         var file = uploadEntry.file || uploadEntry;
         var relativePath = uploadEntry.relativePath || '';
@@ -4330,6 +4531,9 @@ html, body {
             formData.append('file', file);
             if (relativePath) {
                 formData.append('relative_path', relativePath);
+            }
+            if (conflictStrategy) {
+                formData.append('conflict_strategy', conflictStrategy);
             }
 
             var xhr = new XMLHttpRequest();
@@ -4354,21 +4558,21 @@ html, body {
 
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    reject(new Error(data.error || t('upload_failed')));
+                    reject(createApiErrorFromData(data, xhr.status, t('upload_failed')));
                 } catch (e) {
                     reject(new Error(t('upload_failed')));
                 }
             };
 
             xhr.onerror = function() {
-                reject(new Error(t('network_error')));
+                reject(createConnectionError());
             };
 
             xhr.send(formData);
         });
     }
 
-    async function uploadFile(uploadEntry, options) {
+    async function uploadFile(uploadEntry, conflictState, options) {
         options = options || {};
         var file = uploadEntry.file || uploadEntry;
         var displayName = uploadEntry.displayName || uploadEntry.relativePath || file.name;
@@ -4377,26 +4581,89 @@ html, body {
         var id = options.progressId || createUploadProgressItem(displayName);
 
         try {
-            await sendUploadRequest(id, uploadEntry, options);
-            if (batchState) {
-                batchState.completedBytes += file.size || 0;
-                setUploadProgressPercent(id, (batchState.completedBytes / Math.max(batchState.totalBytes || 0, 1)) * 100);
-            } else {
-                setUploadProgressState(id, 'done', 'success', 'complete');
-            }
+            var conflictStrategy = normalizeConflictAction(conflictState && conflictState.action, null);
 
-            if (!options.suppressSuccessToast) {
-                showToast(displayName + ' ' + t('uploaded'), 'success');
-            }
+            while (true) {
+                try {
+                    await sendUploadRequest(id, uploadEntry, conflictStrategy, options);
+                    if (batchState) {
+                        batchState.completedBytes += file.size || 0;
+                        setUploadProgressPercent(id, (batchState.completedBytes / Math.max(batchState.totalBytes || 0, 1)) * 100);
+                    } else {
+                        setUploadProgressState(id, 'done', 'success', 'complete');
+                    }
 
-            if (ownsProgressItem) {
-                setTimeout(function() {
-                    var el = document.getElementById(id);
-                    if (el) el.remove();
-                }, 3000);
-            }
+                    if (!options.suppressSuccessToast) {
+                        showToast(displayName + ' ' + t('uploaded'), 'success');
+                    }
 
-            return true;
+                    if (ownsProgressItem) {
+                        setTimeout(function() {
+                            var el = document.getElementById(id);
+                            if (el) el.remove();
+                        }, 3000);
+                    }
+
+                    return 'uploaded';
+                } catch (err) {
+                    if (err.code === 'destination_exists') {
+                        var autoAction = normalizeConflictAction(conflictState && conflictState.action, err);
+                        if (autoAction === 'skip') {
+                            if (!batchState) {
+                                setUploadProgressState(id, 'skipped', 'info', 'skipped');
+                                setTimeout(function() {
+                                    var skippedEl = document.getElementById(id);
+                                    if (skippedEl) skippedEl.remove();
+                                }, 2500);
+                            }
+                            return 'skipped';
+                        }
+                        if (autoAction === 'replace' || autoAction === 'merge_replace') {
+                            conflictStrategy = autoAction;
+                            continue;
+                        }
+
+                        var decision = await requestConflictResolution(err, displayName);
+                        var chosenAction = normalizeConflictAction(decision.action, err);
+                        if (decision.applyToAll && chosenAction !== 'cancel' && conflictState) {
+                            conflictState.action = chosenAction;
+                        }
+
+                        if (chosenAction === 'cancel') {
+                            if (conflictState) {
+                                conflictState.cancelled = true;
+                            }
+                            if (ownsProgressItem) {
+                                var ownItem = document.getElementById(id);
+                                if (ownItem) ownItem.remove();
+                            }
+                            return 'cancelled';
+                        }
+
+                        if (chosenAction === 'skip') {
+                            if (!batchState) {
+                                setUploadProgressState(id, 'skipped', 'info', 'skipped');
+                                setTimeout(function() {
+                                    var skippedItem = document.getElementById(id);
+                                    if (skippedItem) skippedItem.remove();
+                                }, 2500);
+                            }
+                            return 'skipped';
+                        }
+
+                        conflictStrategy = chosenAction;
+                        continue;
+                    }
+
+                    if (ownsProgressItem) {
+                        setUploadProgressState(id, 'failed', 'error', 'error');
+                    }
+                    if (!options.suppressErrorToast) {
+                        showToast(t('upload_failed') + ' ' + err.message, 'error');
+                    }
+                    return 'failed';
+                }
+            }
         } catch (err) {
             if (ownsProgressItem) {
                 setUploadProgressState(id, 'failed', 'error', 'error');
@@ -4404,7 +4671,7 @@ html, body {
             if (!options.suppressErrorToast) {
                 showToast(t('upload_failed') + ' ' + err.message, 'error');
             }
-            return false;
+            return 'failed';
         }
     }
 
@@ -4565,6 +4832,98 @@ html, body {
             cb();
         }
     };
+
+    function hideConflictDialog() {
+        document.getElementById('conflictOverlay').classList.remove('open');
+        document.getElementById('conflictActions').innerHTML = '';
+        conflictResolver = null;
+    }
+
+    function resolveConflictDialog(action) {
+        var resolver = conflictResolver;
+        var applyToAll = document.getElementById('conflictApplyAll').checked;
+        hideConflictDialog();
+        if (resolver) {
+            resolver({
+                action: action,
+                applyToAll: applyToAll
+            });
+        }
+    }
+
+    function showConflictDialog(options) {
+        return new Promise(function(resolve) {
+            conflictResolver = resolve;
+
+            document.getElementById('conflictTitle').textContent = options.title;
+            document.getElementById('conflictMessageText').textContent = options.message;
+            document.getElementById('conflictApplyText').textContent = options.applyAllLabel || t('conflict_apply_all');
+            document.getElementById('conflictApplyAll').checked = false;
+
+            var actionsEl = document.getElementById('conflictActions');
+            actionsEl.innerHTML = '';
+
+            for (var i = 0; i < options.actions.length; i++) {
+                (function(action) {
+                    var btn = document.createElement('button');
+                    btn.className = action.className;
+                    btn.type = 'button';
+                    btn.textContent = action.label;
+                    btn.addEventListener('click', function() {
+                        resolveConflictDialog(action.id);
+                    });
+                    actionsEl.appendChild(btn);
+                })(options.actions[i]);
+            }
+
+            document.getElementById('conflictOverlay').classList.add('open');
+        });
+    }
+
+    window.closeConflictDialogButton = function(event) {
+        if (event) event.stopPropagation();
+        resolveConflictDialog('cancel');
+    };
+
+    window.closeConflictOverlay = function(e) {
+        if (e.target === document.getElementById('conflictOverlay')) {
+            resolveConflictDialog('cancel');
+        }
+    };
+
+    function normalizeConflictAction(action, err) {
+        if (action === 'merge_replace' && !(err && err.canMerge)) {
+            return 'replace';
+        }
+        return action;
+    }
+
+    async function requestConflictResolution(err, displayName) {
+        var itemName = displayName || getPathName(err && err.destinationPath) || t('unknown');
+        var isFolderConflict = err && (err.sourceType === 'directory' || err.destinationType === 'directory');
+        var message = t(isFolderConflict ? 'conflict_folder_message' : 'conflict_file_message').replace('{name}', itemName);
+        message += '\n\n' + t(err && err.canMerge ? 'conflict_merge_hint' : 'conflict_replace_hint');
+
+        var actions = [
+            { id: 'skip', label: t('skip_item'), className: 'btn btn-skip' },
+            { id: 'replace', label: t('replace_existing'), className: 'btn btn-danger' }
+        ];
+
+        if (err && err.canMerge) {
+            actions.push({
+                id: 'merge_replace',
+                label: t('merge_replace'),
+                className: 'btn btn-primary'
+            });
+        }
+
+        return showConflictDialog({
+            title: t(isFolderConflict ? 'conflict_folder_title' : 'conflict_file_title'),
+            message: message,
+            applyAllLabel: t('conflict_apply_all'),
+            actions: actions
+        });
+    }
 
     // ===== Toast =====
     function showToast(message, type) {

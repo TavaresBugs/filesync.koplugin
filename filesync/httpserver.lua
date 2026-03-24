@@ -308,7 +308,7 @@ function HttpServer:_route(client, method, path, query, headers, body)
             if content_type:match("multipart/form%-data") then
                 local boundary = content_type:match("boundary=([^\r\n;]+)")
                 if boundary then
-                    local ok, err_msg = FileOps:handleUpload(dir, body, boundary, {
+                    local ok, err_msg, err_details = FileOps:handleUpload(dir, body, boundary, {
                         scope = nav_context.scope,
                         allow_root_scopes = nav_context.allow_root_scopes,
                         safe_mode = safe_mode,
@@ -316,7 +316,13 @@ function HttpServer:_route(client, method, path, query, headers, body)
                     if ok then
                         self:_sendJSON(client, 200, {success = true, message = "Upload complete"})
                     else
-                        self:_sendJSON(client, 400, {error = err_msg or "Upload failed"})
+                        local payload = {error = err_msg or "Upload failed"}
+                        if err_details then
+                            for key, value in pairs(err_details) do
+                                payload[key] = value
+                            end
+                        end
+                        self:_sendJSON(client, err_details and err_details.code == "destination_exists" and 409 or 400, payload)
                     end
                 else
                     self:_sendJSON(client, 400, {error = "Missing boundary in content-type"})

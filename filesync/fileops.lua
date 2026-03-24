@@ -893,6 +893,8 @@ function FileOps:handleUpload(rel_dir, body, boundary, options)
         return false, "No files were uploaded"
     end
 
+    local conflict_strategy = self:_normalizeConflictStrategy(form_fields.conflict_strategy or options.conflict_strategy)
+
     local normalized_rel_dir = tostring(rel_dir or "/"):gsub("//+", "/"):gsub("^%s+", ""):gsub("%s+$", "")
     if normalized_rel_dir == "" then
         normalized_rel_dir = "/"
@@ -905,6 +907,7 @@ function FileOps:handleUpload(rel_dir, body, boundary, options)
     end
 
     local pending_dirs = {}
+    local planned_targets = {}
     local prepared_entries = {}
     for _, entry in ipairs(upload_entries) do
         local upload_rel_path, path_err = self:_normalizeUploadRelativePath(form_fields.relative_path, entry.filename)
@@ -923,11 +926,41 @@ function FileOps:handleUpload(rel_dir, body, boundary, options)
             return false, target_err
         end
 
+        local target_attr = lfs.attributes(target_full_path)
+        if target_attr and conflict_strategy == "error" then
+            return false, "Destination already exists", self:_buildDestinationConflict(
+                { mode = "file" },
+                target_attr,
+                target_full_path,
+                scope.id,
+                {
+                    destination_path = target_rel_path,
+                    source_type = "file",
+                }
+            )
+        end
+
+        if planned_targets[target_full_path] then
+            return false, "Destination already exists", self:_buildDestinationConflict(
+                { mode = "file" },
+                { mode = "file" },
+                target_full_path,
+                scope.id,
+                {
+                    destination_path = target_rel_path,
+                    source_type = "file",
+                    destination_type = "file",
+                }
+            )
+        end
+
         local parent_dir = target_full_path:match("(.+)/[^/]+$") or dir_path
         local ok_dirs, dir_err = self:_collectUploadDirectories(parent_dir, pending_dirs, scope.root_path)
         if not ok_dirs then
             return false, dir_err
         end
+
+        planned_targets[target_full_path] = true
 
         table.insert(prepared_entries, {
             full_path = target_full_path,
@@ -943,18 +976,39 @@ function FileOps:handleUpload(rel_dir, body, boundary, options)
 
     local uploaded_count = 0
     for _, entry in ipairs(prepared_entries) do
-        local f = io.open(entry.full_path, "wb")
+        local temp_path = string.format("%s.filesync-upload-%d.tmp", entry.full_path, os.time())
+        local f = io.open(temp_path, "wb")
         if f then
             local write_ok, write_err = f:write(entry.data)
             local close_ok, close_err = f:close()
             if write_ok and close_ok ~= false then
-                uploaded_count = uploaded_count + 1
-                logger.info("FileSync: Uploaded", entry.relative_path, "to", dir_path)
+                local can_finalize = true
+                local target_attr = lfs.attributes(entry.full_path)
+                if target_attr then
+                    local remove_ok, remove_err = self:_removeResolvedPath(entry.full_path)
+                    if not remove_ok then
+                        os.remove(temp_path)
+                        logger.warn("FileSync: Cannot replace existing destination", entry.full_path, remove_err)
+                        can_finalize = false
+                    end
+                end
+
+                if can_finalize then
+                    local rename_ok, rename_err = os.rename(temp_path, entry.full_path)
+                    if rename_ok then
+                        uploaded_count = uploaded_count + 1
+                        logger.info("FileSync: Uploaded", entry.relative_path, "to", dir_path)
+                    else
+                        os.remove(temp_path)
+                        logger.warn("FileSync: Cannot finalize upload", entry.full_path, rename_err)
+                    end
+                end
             else
-                logger.warn("FileSync: Cannot write file", entry.full_path, write_err or close_err)
+                os.remove(temp_path)
+                logger.warn("FileSync: Cannot write upload temp file", temp_path, write_err or close_err)
             end
         else
-            logger.warn("FileSync: Cannot write file", entry.full_path)
+            logger.warn("FileSync: Cannot write file", temp_path)
         end
     end
 
@@ -1080,6 +1134,54 @@ end
 
 function FileOps:_isPathInside(parent_path, child_path)
     return child_path:sub(1, #parent_path + 1) == parent_path .. "/"
+end
+
+function FileOps:_normalizeConflictStrategy(strategy)
+    if strategy == "replace" or strategy == "merge_replace" then
+        return strategy
+    end
+    return "error"
+end
+
+function FileOps:_describeEntryType(attr)
+    if not attr then
+        return nil
+    end
+    return attr.mode == "directory" and "directory" or "file"
+end
+
+function FileOps:_buildDestinationConflict(src_attr, dest_attr, dest_path, scope_id, extra)
+    local details = extra or {}
+    details.code = "destination_exists"
+    details.source_type = details.source_type or self:_describeEntryType(src_attr)
+    details.destination_type = details.destination_type or self:_describeEntryType(dest_attr)
+    details.can_merge = details.can_merge == true
+        or (details.source_type == "directory" and details.destination_type == "directory")
+    if dest_path and scope_id and not details.destination_path then
+        details.destination_path = self:_getRelativePath(dest_path, scope_id)
+    end
+    return details
+end
+
+function FileOps:_removeResolvedPath(full_path)
+    local attr = lfs.attributes(full_path)
+    if not attr then
+        return true
+    end
+
+    if attr.mode == "directory" then
+        local ok, err = self:_deleteRecursive(full_path)
+        if not ok then
+            return false, "Cannot delete existing destination: " .. tostring(err)
+        end
+        return true
+    end
+
+    local ok, err = os.remove(full_path)
+    if not ok then
+        return false, "Cannot delete existing destination: " .. tostring(err)
+    end
+    return true
 end
 
 --- Move a file or directory

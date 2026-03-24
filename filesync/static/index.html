@@ -907,6 +907,11 @@ html, body {
     opacity: 1;
 }
 
+.file-list.view-grid .file-item.selection-mode .file-select-marker,
+.file-list.view-grid-large .file-item.selection-mode .file-select-marker {
+    display: none;
+}
+
 .file-icon {
     width: 40px;
     height: 40px;
@@ -2633,6 +2638,15 @@ html, body {
         </div>
         <div class="selection-bar-divider" aria-hidden="true"></div>
         <div class="selection-bar-actions">
+            <button class="selection-action" id="btnSelectionSelectAll" type="button" onclick="selectAllVisibleItems()">
+                <span class="selection-action-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <polyline points="8 12 11 15 16 9"/>
+                    </svg>
+                </span>
+                <span class="selection-action-label" data-i18n="select_all">All</span>
+            </button>
             <button class="selection-action" id="btnSelectionDownload" type="button" onclick="downloadSelectedItems()">
                 <span class="selection-action-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2799,6 +2813,8 @@ html, body {
             move: "Move",
             copy: "Copy",
             cut: "Cut",
+            select_all: "All",
+            select_all_title: "Select all",
             selected_label: "Selected",
             selected_short_label: "Sel.",
             filter_placeholder: "Filter files...",
@@ -2909,6 +2925,8 @@ html, body {
             move: "Mover",
             copy: "Copiar",
             cut: "Cortar",
+            select_all: "Todo",
+            select_all_title: "Seleccionar todo",
             selected_label: "Seleccionados",
             selected_short_label: "Sel.",
             filter_placeholder: "Filtrar archivos...",
@@ -3019,6 +3037,8 @@ html, body {
             move: "Mover",
             copy: "Copiar",
             cut: "Recortar",
+            select_all: "Tudo",
+            select_all_title: "Selecionar tudo",
             selected_label: "Selecionados",
             selected_short_label: "Sel.",
             filter_placeholder: "Filtrar arquivos...",
@@ -3129,6 +3149,8 @@ html, body {
             move: "移动",
             copy: "复制",
             cut: "剪切",
+            select_all: "全选",
+            select_all_title: "全选",
             selected_label: "已选择",
             selected_short_label: "选",
             filter_placeholder: "筛选文件...",
@@ -3331,6 +3353,8 @@ html, body {
         document.getElementById('btnFolder').setAttribute('aria-label', t('new_folder_title'));
         document.getElementById('btnParentNav').title = t('go_up');
         document.getElementById('btnParentNav').setAttribute('aria-label', t('go_up'));
+        document.getElementById('btnSelectionSelectAll').title = t('select_all_title');
+        document.getElementById('btnSelectionSelectAll').setAttribute('aria-label', t('select_all_title'));
         document.getElementById('btnSelectionDownload').title = t('download');
         document.getElementById('btnSelectionCopy').title = t('copy');
         document.getElementById('btnSelectionCut').title = t('cut');
@@ -4101,6 +4125,37 @@ html, body {
         updateSelectionUI();
     }
 
+    function getSelectablePaths() {
+        return currentEntries.map(function(entry) {
+            return entry.path;
+        });
+    }
+
+    function areAllVisibleItemsSelected() {
+        if (!currentEntries.length || selectedPaths.length < currentEntries.length) {
+            return false;
+        }
+
+        var selectedLookup = {};
+        for (var i = 0; i < selectedPaths.length; i++) {
+            selectedLookup[selectedPaths[i]] = true;
+        }
+
+        for (var j = 0; j < currentEntries.length; j++) {
+            if (!selectedLookup[currentEntries[j].path]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    function isEditableTarget(target) {
+        if (!target) return false;
+        var tagName = (target.tagName || '').toUpperCase();
+        return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || !!target.isContentEditable;
+    }
+
     function hasClipboardItems() {
         return !!(clipboardState.mode && clipboardState.items && clipboardState.items.length);
     }
@@ -4179,12 +4234,14 @@ html, body {
         var selectBtn = document.getElementById('btnSelect');
         var selectionBar = document.getElementById('selectionBar');
         var selectionCount = document.getElementById('selectionCount');
+        var selectAllBtn = document.getElementById('btnSelectionSelectAll');
         var downloadBtn = document.getElementById('btnSelectionDownload');
         var copyBtn = document.getElementById('btnSelectionCopy');
         var cutBtn = document.getElementById('btnSelectionCut');
         var deleteBtn = document.getElementById('btnSelectionDelete');
         var hasSelection = selectedPaths.length > 0;
         var showBar = selectionMode;
+        var allVisibleSelected = areAllVisibleItemsSelected();
 
         if (selectBtn) {
             selectBtn.classList.toggle('active', selectionMode);
@@ -4199,6 +4256,7 @@ html, body {
             selectionBar.classList.toggle('visible', showBar);
         }
 
+        if (selectAllBtn) selectAllBtn.disabled = !currentEntries.length || allVisibleSelected;
         if (downloadBtn) downloadBtn.disabled = !hasSelection;
         if (copyBtn) copyBtn.disabled = !hasSelection;
         if (cutBtn) cutBtn.disabled = !hasSelection;
@@ -4224,6 +4282,28 @@ html, body {
         if (!selectionMode) {
             selectedPaths = [];
         }
+        updateSelectionUI();
+        renderFiles(currentEntries);
+    };
+
+    window.selectAllVisibleItems = function() {
+        if (!currentEntries.length) return;
+        if (!selectionMode) {
+            selectionMode = true;
+        }
+
+        var selectedLookup = {};
+        for (var i = 0; i < selectedPaths.length; i++) {
+            selectedLookup[selectedPaths[i]] = true;
+        }
+
+        var visiblePaths = getSelectablePaths();
+        for (var j = 0; j < visiblePaths.length; j++) {
+            if (!selectedLookup[visiblePaths[j]]) {
+                selectedPaths.push(visiblePaths[j]);
+            }
+        }
+
         updateSelectionUI();
         renderFiles(currentEntries);
     };
@@ -5307,6 +5387,19 @@ html, body {
             }
             _navigateInternal(state.path, state.scope);
         }
+    });
+
+    document.addEventListener('keydown', function(event) {
+        var pressedA = event.key === 'a' || event.key === 'A';
+        if (!pressedA || (!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) {
+            return;
+        }
+        if (isEditableTarget(event.target) || !currentEntries.length) {
+            return;
+        }
+
+        event.preventDefault();
+        window.selectAllVisibleItems();
     });
 
     // ===== Init =====

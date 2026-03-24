@@ -2750,6 +2750,7 @@ html, body {
                 html += '</div>';
             } else {
                 html += '<div class="file-actions">';
+                html += '<button class="btn-icon" onclick="event.stopPropagation(); downloadFile(\'' + escapeAttr(entry.path) + '\')" title="' + escapeHtml(t('download')) + '">' + icons.download + '</button>';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); renameItem(\'' + escapeAttr(entry.path) + '\', \'' + escapeAttr(entry.name) + '\')" title="' + escapeHtml(t('rename')) + '">' + icons.rename + '</button>';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); deleteItem(\'' + escapeAttr(entry.path) + '\')" title="' + escapeHtml(t('delete_label')) + '">' + icons.trash + '</button>';
                 html += '<span class="file-chevron"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>';

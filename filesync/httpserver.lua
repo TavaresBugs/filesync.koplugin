@@ -434,6 +434,16 @@ function HttpServer:_buildNavigationContext(requested_scope, safe_mode, include_
     local default_scope = fileops:getDefaultScopeId()
     local allow_root_scopes = not safe_mode
     local available_scopes = fileops:getNavigationScopes(allow_root_scopes)
+
+    if allow_root_scopes then
+        for _, scope in ipairs(available_scopes) do
+            if scope.id == "system" then
+                default_scope = "system"
+                break
+            end
+        end
+    end
+
     local effective_scope = requested_scope or default_scope
     local scope_found = false
 

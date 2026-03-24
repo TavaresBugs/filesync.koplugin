@@ -7,6 +7,13 @@ if not ok then
     error("FileSync: cannot load LFS filesystem module")
 end
 local logger = require("logger")
+local bitops = rawget(_G, "bit32") or rawget(_G, "bit")
+if not bitops then
+    local bit_ok, loaded_bitops = pcall(require, "bit")
+    if bit_ok then
+        bitops = loaded_bitops
+    end
+end
 
 local SAFE_MODE_EXTENSIONS = {
     epub = true, pdf = true, mobi = true, azw = true, azw3 = true,
@@ -71,6 +78,134 @@ local function command_succeeded(ok, why, code)
         return code == 0
     end
     return false
+end
+
+local function normalize_uint32(value)
+    value = tonumber(value) or 0
+    value = value % 4294967296
+    if value < 0 then
+        value = value + 4294967296
+    end
+    return value
+end
+
+local function band_uint32(a, b)
+    a = normalize_uint32(a)
+    b = normalize_uint32(b)
+    if bitops and bitops.band then
+        return normalize_uint32(bitops.band(a, b))
+    end
+
+    local result = 0
+    local bit_value = 1
+    while a > 0 or b > 0 do
+        local a_bit = a % 2
+        local b_bit = b % 2
+        if a_bit == 1 and b_bit == 1 then
+            result = result + bit_value
+        end
+        a = math.floor(a / 2)
+        b = math.floor(b / 2)
+        bit_value = bit_value * 2
+    end
+
+    return normalize_uint32(result)
+end
+
+local function bxor_uint32(a, b)
+    a = normalize_uint32(a)
+    b = normalize_uint32(b)
+    if bitops and bitops.bxor then
+        return normalize_uint32(bitops.bxor(a, b))
+    end
+
+    local result = 0
+    local bit_value = 1
+    while a > 0 or b > 0 do
+        local a_bit = a % 2
+        local b_bit = b % 2
+        if a_bit ~= b_bit then
+            result = result + bit_value
+        end
+        a = math.floor(a / 2)
+        b = math.floor(b / 2)
+        bit_value = bit_value * 2
+    end
+
+    return normalize_uint32(result)
+end
+
+local function rshift_uint32(value, shift)
+    value = normalize_uint32(value)
+    if shift <= 0 then
+        return value
+    end
+    if shift >= 32 then
+        return 0
+    end
+    if bitops and bitops.rshift then
+        return normalize_uint32(bitops.rshift(value, shift))
+    end
+    return math.floor(value / (2 ^ shift))
+end
+
+local function pack_uint16_le(value)
+    value = math.floor(tonumber(value) or 0) % 65536
+    return string.char(
+        value % 256,
+        math.floor(value / 256) % 256
+    )
+end
+
+local function pack_uint32_le(value)
+    value = normalize_uint32(value)
+    return string.char(
+        value % 256,
+        math.floor(value / 256) % 256,
+        math.floor(value / 65536) % 256,
+        math.floor(value / 16777216) % 256
+    )
+end
+
+local function to_zip_dos_datetime(timestamp)
+    local date_table = timestamp and os.date("*t", timestamp) or nil
+    if not date_table then
+        return 0, 33
+    end
+
+    local year = math.max(1980, math.min(2107, tonumber(date_table.year) or 1980))
+    local month = math.max(1, math.min(12, tonumber(date_table.month) or 1))
+    local day = math.max(1, math.min(31, tonumber(date_table.day) or 1))
+    local hour = math.max(0, math.min(23, tonumber(date_table.hour) or 0))
+    local min = math.max(0, math.min(59, tonumber(date_table.min) or 0))
+    local sec = math.max(0, math.min(59, tonumber(date_table.sec) or 0))
+
+    local dos_time = hour * 2048 + min * 32 + math.floor(sec / 2)
+    local dos_date = (year - 1980) * 512 + month * 32 + day
+    return dos_time, dos_date
+end
+
+local CRC32_TABLE = {}
+for i = 0, 255 do
+    local crc = i
+    for _ = 1, 8 do
+        if band_uint32(crc, 1) == 1 then
+            crc = bxor_uint32(rshift_uint32(crc, 1), 0xEDB88320)
+        else
+            crc = rshift_uint32(crc, 1)
+        end
+    end
+    CRC32_TABLE[i] = normalize_uint32(crc)
+end
+
+local function update_crc32(crc, chunk)
+    crc = normalize_uint32(crc)
+    for i = 1, #chunk do
+        local byte = string.byte(chunk, i)
+        local idx = band_uint32(bxor_uint32(crc, byte), 0xFF)
+        crc = bxor_uint32(rshift_uint32(crc, 8), CRC32_TABLE[idx])
+    end
+    return normalize_uint32(crc)
 end
 
 function FileOps:setRootDir(dir)
@@ -604,6 +739,225 @@ function FileOps:_copySafeDownloadTree(src_path, dst_path)
     return false, "Unsupported entry type"
 end
 
+function FileOps:_collectZipEntries(root_path, zip_path, entries)
+    local attr = lfs.attributes(root_path)
+    if not attr or attr.mode ~= "directory" then
+        return false, "Directory does not exist"
+    end
+
+    table.insert(entries, {
+        kind = "directory",
+        full_path = root_path,
+        zip_path = zip_path .. "/",
+        modified = attr.modification,
+    })
+
+    local children = {}
+    for name in lfs.dir(root_path) do
+        if name ~= "." and name ~= ".." then
+            table.insert(children, name)
+        end
+    end
+    table.sort(children)
+
+    for _, name in ipairs(children) do
+        local child_path = root_path .. "/" .. name
+        local child_attr = lfs.attributes(child_path)
+        if child_attr then
+            local child_zip_path = zip_path .. "/" .. name
+            if child_attr.mode == "directory" then
+                local ok, err = self:_collectZipEntries(child_path, child_zip_path, entries)
+                if not ok then
+                    return false, err
+                end
+            elseif child_attr.mode == "file" then
+                table.insert(entries, {
+                    kind = "file",
+                    full_path = child_path,
+                    zip_path = child_zip_path,
+                    modified = child_attr.modification,
+                })
+            end
+        end
+    end
+
+    return true
+end
+
+function FileOps:_writeZipEntries(archive_file, entries)
+    local archive_offset = 0
+    local central_records = {}
+    local zip_utf8_flag = 0x0800
+    local zip_data_descriptor_flag = 0x0008
+    local zip_store_method = 0
+    local chunk_size = 65536
+
+    local function write_archive_chunk(chunk)
+        local write_ok, write_err = archive_file:write(chunk)
+        if not write_ok then
+            return false, write_err
+        end
+        archive_offset = archive_offset + #chunk
+        return true
+    end
+
+    for _, entry in ipairs(entries) do
+        local zip_name = entry.zip_path
+        local dos_time, dos_date = to_zip_dos_datetime(entry.modified)
+        local local_header_offset = archive_offset
+        local is_directory = entry.kind == "directory"
+        local flags = is_directory and zip_utf8_flag or (zip_utf8_flag + zip_data_descriptor_flag)
+
+        local local_header = table.concat({
+            pack_uint32_le(0x04034B50),
+            pack_uint16_le(20),
+            pack_uint16_le(flags),
+            pack_uint16_le(zip_store_method),
+            pack_uint16_le(dos_time),
+            pack_uint16_le(dos_date),
+            pack_uint32_le(0),
+            pack_uint32_le(0),
+            pack_uint32_le(0),
+            pack_uint16_le(#zip_name),
+            pack_uint16_le(0),
+            zip_name,
+        })
+        local header_ok, header_err = write_archive_chunk(local_header)
+        if not header_ok then
+            return false, "Cannot write ZIP header: " .. tostring(header_err)
+        end
+
+        local crc32 = 0
+        local uncompressed_size = 0
+
+        if not is_directory then
+            local source_file, source_err = io.open(entry.full_path, "rb")
+            if not source_file then
+                return false, "Cannot read source file: " .. tostring(source_err)
+            end
+
+            crc32 = 0xFFFFFFFF
+            while true do
+                local chunk, read_err = source_file:read(chunk_size)
+                if read_err then
+                    source_file:close()
+                    return false, "Cannot read source file: " .. tostring(read_err)
+                end
+                if not chunk then
+                    break
+                end
+
+                uncompressed_size = uncompressed_size + #chunk
+                crc32 = update_crc32(crc32, chunk)
+
+                local chunk_ok, chunk_err = write_archive_chunk(chunk)
+                if not chunk_ok then
+                    source_file:close()
+                    return false, "Cannot write ZIP data: " .. tostring(chunk_err)
+                end
+            end
+
+            source_file:close()
+            crc32 = bxor_uint32(crc32, 0xFFFFFFFF)
+
+            local descriptor_ok, descriptor_err = write_archive_chunk(table.concat({
+                pack_uint32_le(0x08074B50),
+                pack_uint32_le(crc32),
+                pack_uint32_le(uncompressed_size),
+                pack_uint32_le(uncompressed_size),
+            }))
+            if not descriptor_ok then
+                return false, "Cannot finalize ZIP entry: " .. tostring(descriptor_err)
+            end
+        end
+
+        table.insert(central_records, {
+            zip_name = zip_name,
+            flags = flags,
+            method = zip_store_method,
+            dos_time = dos_time,
+            dos_date = dos_date,
+            crc32 = crc32,
+            compressed_size = uncompressed_size,
+            uncompressed_size = uncompressed_size,
+            external_attributes = is_directory and 0x10 or 0,
+            local_header_offset = local_header_offset,
+        })
+    end
+
+    local central_directory_offset = archive_offset
+
+    for _, record in ipairs(central_records) do
+        local central_header_ok, central_header_err = write_archive_chunk(table.concat({
+            pack_uint32_le(0x02014B50),
+            pack_uint16_le(20),
+            pack_uint16_le(20),
+            pack_uint16_le(record.flags),
+            pack_uint16_le(record.method),
+            pack_uint16_le(record.dos_time),
+            pack_uint16_le(record.dos_date),
+            pack_uint32_le(record.crc32),
+            pack_uint32_le(record.compressed_size),
+            pack_uint32_le(record.uncompressed_size),
+            pack_uint16_le(#record.zip_name),
+            pack_uint16_le(0),
+            pack_uint16_le(0),
+            pack_uint16_le(0),
+            pack_uint16_le(0),
+            pack_uint32_le(record.external_attributes),
+            pack_uint32_le(record.local_header_offset),
+            record.zip_name,
+        }))
+        if not central_header_ok then
+            return false, "Cannot write ZIP directory: " .. tostring(central_header_err)
+        end
+    end
+
+    local central_directory_size = archive_offset - central_directory_offset
+    local end_record_ok, end_record_err = write_archive_chunk(table.concat({
+        pack_uint32_le(0x06054B50),
+        pack_uint16_le(0),
+        pack_uint16_le(0),
+        pack_uint16_le(#central_records),
+        pack_uint16_le(#central_records),
+        pack_uint32_le(central_directory_size),
+        pack_uint32_le(central_directory_offset),
+        pack_uint16_le(0),
+    }))
+    if not end_record_ok then
+        return false, "Cannot finalize ZIP archive: " .. tostring(end_record_err)
+    end
+
+    return true
+end
+
+function FileOps:_createZipArchive(source_path, archive_path)
+    local archive_root_name = source_path:match("([^/]+)$") or "download"
+    local entries = {}
+    local collect_ok, collect_err = self:_collectZipEntries(source_path, archive_root_name, entries)
+    if not collect_ok then
+        return false, collect_err
+    end
+
+    local archive_file, archive_err = io.open(archive_path, "wb")
+    if not archive_file then
+        return false, "Cannot create ZIP archive: " .. tostring(archive_err)
+    end
+
+    local write_ok, write_err = self:_writeZipEntries(archive_file, entries)
+    local close_ok, close_err = archive_file:close()
+    if not write_ok then
+        os.remove(archive_path)
+        return false, write_err
+    end
+    if close_ok == false then
+        os.remove(archive_path)
+        return false, "Cannot finalize ZIP archive: " .. tostring(close_err)
+    end
+
+    return true
+end
+
 function FileOps:_createDirectoryArchive(full_path, safe_mode, scope_root)
     if full_path == (scope_root or self._root_dir) then
         return nil, nil, nil, "Cannot download root directory", 403
@@ -611,13 +965,15 @@ function FileOps:_createDirectoryArchive(full_path, safe_mode, scope_root)
 
     local entry_name = full_path:match("([^/]+)$") or "download"
     local temp_root = string.format("/tmp/filesync-download-%d-%d", os.time(), math.random(10000, 99999))
-    local zip_parent = full_path:match("(.+)/[^/]+$") or "/"
-    local zip_target = entry_name
 
     local mkdir_ok, mkdir_err = self:_runShellCommand("mkdir -p " .. self:_shellEscape(temp_root) .. " 2>/dev/null")
     if not mkdir_ok then
         return nil, nil, nil, "Cannot prepare temporary archive directory: " .. tostring(mkdir_err)
     end
+
+    local archive_name = entry_name .. ".zip"
+    local archive_path = temp_root .. "/" .. archive_name
+    local zip_source_path = full_path
 
     if safe_mode then
         local stage_root = temp_root .. "/stage"
@@ -634,46 +990,18 @@ function FileOps:_createDirectoryArchive(full_path, safe_mode, scope_root)
             return nil, nil, nil, copy_err
         end
 
-        zip_parent = stage_root
+        zip_source_path = stage_entry
     end
 
-    local archive_name = entry_name .. ".zip"
-    local archive_path = temp_root .. "/" .. archive_name
-    local zip_cmd = "cd " .. self:_shellEscape(zip_parent)
-        .. " && zip -qr " .. self:_shellEscape(archive_path) .. " " .. self:_shellEscape(zip_target) .. " 2>/dev/null"
-    local zip_ok, zip_err = self:_runShellCommand(zip_cmd)
+    local zip_ok, zip_err = self:_createZipArchive(zip_source_path, archive_path)
     if zip_ok then
         logger.info("FileSync: Created zip download archive", archive_path, "for", full_path)
         return archive_path, archive_name, temp_root, nil, nil, "application/zip"
     end
 
-    logger.warn("FileSync: zip archive creation failed, trying tar.gz fallback", full_path, zip_err)
-
-    archive_name = entry_name .. ".tar.gz"
-    archive_path = temp_root .. "/" .. archive_name
-    local tar_gz_cmd = "cd " .. self:_shellEscape(zip_parent)
-        .. " && tar -czf " .. self:_shellEscape(archive_path) .. " " .. self:_shellEscape(zip_target) .. " 2>/dev/null"
-    local tar_gz_ok, tar_gz_err = self:_runShellCommand(tar_gz_cmd)
-    if tar_gz_ok then
-        logger.info("FileSync: Created tar.gz download archive", archive_path, "for", full_path)
-        return archive_path, archive_name, temp_root, nil, nil, "application/gzip"
-    end
-
-    logger.warn("FileSync: tar.gz archive creation failed, trying tar fallback", full_path, tar_gz_err)
-
-    archive_name = entry_name .. ".tar"
-    archive_path = temp_root .. "/" .. archive_name
-    local tar_cmd = "cd " .. self:_shellEscape(zip_parent)
-        .. " && tar -cf " .. self:_shellEscape(archive_path) .. " " .. self:_shellEscape(zip_target) .. " 2>/dev/null"
-    local tar_ok, tar_err = self:_runShellCommand(tar_cmd)
-    if tar_ok then
-        logger.info("FileSync: Created tar download archive", archive_path, "for", full_path)
-        return archive_path, archive_name, temp_root, nil, nil, "application/x-tar"
-    end
-
-    logger.warn("FileSync: Failed to create directory archive", full_path, tar_err or tar_gz_err or zip_err)
+    logger.warn("FileSync: Failed to create ZIP archive", full_path, zip_err)
     self:_removeTempPath(temp_root)
-    return nil, nil, nil, "Cannot create folder archive"
+    return nil, nil, nil, "Cannot create ZIP archive"
 end
 
 --- Download a file, sending it directly to the client socket

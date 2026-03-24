@@ -1817,12 +1817,69 @@ html, body {
     justify-content: flex-end;
 }
 
+#modalOverlay .modal-actions {
+    justify-content: center;
+}
+
 .modal-actions .btn {
     min-width: 80px;
     padding: 10px 18px;
     font-size: 14px;
 }
 
+#modalOverlay .modal-actions .btn {
+    min-width: 132px;
+}
+
+#modalOverlay .modal {
+    position: relative;
+    overflow: visible;
+    padding-top: 24px;
+}
+
+#modalOverlay .modal .modal-title {
+    padding-right: 32px;
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: -12px;
+    right: -12px;
+    width: 42px;
+    height: 42px;
+    border: 2px solid var(--surface);
+    border-radius: 999px;
+    background: var(--danger);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition), color var(--transition), transform var(--transition);
+    box-shadow: var(--shadow-md);
+    z-index: 2;
+}
+
+.modal-close-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.modal-close-btn:hover {
+    background: var(--danger-hover);
+    transform: scale(1.04);
+}
+
+.modal-close-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring), var(--shadow-md);
+}
 /* ===== Toast Notifications ===== */
 .toast-container {
     position: fixed;
@@ -2361,10 +2418,15 @@ html, body {
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
     <div class="modal" onclick="event.stopPropagation()">
         <div class="modal-handle"></div>
+        <button class="modal-close-btn" id="modalCloseBtn" type="button" onclick="closeBasicModalButton(event)" aria-label="Cancel" title="Cancel">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+            </svg>
+        </button>
         <div class="modal-title" id="modalTitle"></div>
         <input type="text" class="modal-input" id="modalInput" onkeydown="if(event.key==='Enter')confirmModal()">
         <div class="modal-actions">
-            <button class="btn btn-secondary" id="modalCancelBtn" onclick="hideModal()">Cancel</button>
             <button class="btn btn-primary" id="modalConfirm" onclick="confirmModal()">Create</button>
         </div>
     </div>
@@ -2891,7 +2953,8 @@ html, body {
         document.getElementById('btnUploadFolderCta').title = t('upload_folder_cta');
         document.getElementById('btnUploadFolderCta').setAttribute('aria-label', t('upload_folder_cta'));
         // Modal default buttons
-        document.getElementById('modalCancelBtn').textContent = t('cancel');
+        document.getElementById('modalCloseBtn').title = t('cancel');
+        document.getElementById('modalCloseBtn').setAttribute('aria-label', t('cancel'));
         document.getElementById('confirmCancelBtn').textContent = t('cancel');
         updateThemeToggleUI();
         updateParentNav();
@@ -4398,6 +4461,11 @@ html, body {
         renderFiles(currentEntries);
     };
 
+
+    window.closeBasicModalButton = function(event) {
+        if (event) event.stopPropagation();
+        hideModal();
+    };
     window.onSortChange = function() {
         var val = document.getElementById('sortSelect').value;
         var parts = val.split('-');
@@ -4432,7 +4500,8 @@ html, body {
         document.getElementById('modalTitle').textContent = title;
         document.getElementById('modalInput').value = defaultValue;
         document.getElementById('modalConfirm').textContent = confirmText;
-        document.getElementById('modalCancelBtn').textContent = t('cancel');
+        document.getElementById('modalCloseBtn').title = t('cancel');
+        document.getElementById('modalCloseBtn').setAttribute('aria-label', t('cancel'));
         document.getElementById('modalOverlay').classList.add('open');
         setTimeout(function() {
             var input = document.getElementById('modalInput');

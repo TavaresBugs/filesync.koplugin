@@ -349,14 +349,6 @@ html, body {
     flex-wrap: wrap;
 }
 
-.toolbar-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-left: auto;
-}
-
 .search-box {
     flex: 1;
     min-width: 160px;
@@ -412,12 +404,68 @@ html, body {
     padding-right: 28px;
 }
 
-.scope-select {
-    min-width: 120px;
+.nav-context {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
-.toolbar-toggle {
+.nav-context > [hidden] {
+    display: none !important;
+}
+
+.nav-context.hidden {
+    display: none;
+}
+
+.nav-scope-select {
     min-width: 96px;
+    max-width: 160px;
+    height: 40px;
+    padding: 0 28px 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
+        linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
+    background-position:
+        calc(100% - 14px) 12px,
+        calc(100% - 9px) 12px;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+
+.nav-scope-select:disabled {
+    opacity: 0.6;
+}
+
+.nav-hidden-toggle,
+.nav-view-toggle {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    gap: 0;
+}
+
+.nav-hidden-toggle svg,
+.nav-view-toggle svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 /* ===== Buttons ===== */
@@ -1419,11 +1467,21 @@ html, body {
     .header { padding: 10px 12px; }
     .breadcrumbs-wrap { padding: 10px 12px 2px; }
     .toolbar { padding: 6px 12px; }
-    .toolbar-controls { width: 100%; margin-left: 0; }
     .file-list { padding: 4px 12px 100px; }
     .dropzone { padding: 0 12px; }
     .upload-progress { padding: 0 12px; }
     .file-item { padding: 10px; gap: 10px; }
+}
+
+@media (max-width: 520px) {
+    .toolbar .nav-context {
+        margin-left: 0;
+    }
+
+    .nav-scope-select {
+        flex: 1 1 auto;
+        max-width: none;
+    }
 }
 
 /* ===== Scrollbar ===== */
@@ -1707,20 +1765,20 @@ html, body {
         </svg>
         <input type="text" id="searchInput" placeholder="Filter files..." oninput="onFilterChange()">
     </div>
-    <div class="toolbar-controls">
-        <select class="sort-select scope-select" id="scopeSelect" onchange="onScopeChange()" hidden></select>
-        <button class="btn btn-secondary btn-sm toolbar-toggle" id="btnHiddenToggle" onclick="toggleHiddenFiles()" type="button" hidden></button>
-        <button class="btn btn-secondary btn-sm toolbar-toggle" id="btnViewMode" onclick="toggleViewMode()" type="button"></button>
-        <select class="sort-select" id="sortSelect" onchange="onSortChange()">
-            <option value="name-asc" data-i18n="sort_name_asc">Name A-Z</option>
-            <option value="name-desc" data-i18n="sort_name_desc">Name Z-A</option>
-            <option value="date-desc" data-i18n="sort_newest">Newest first</option>
-            <option value="date-asc" data-i18n="sort_oldest">Oldest first</option>
-            <option value="size-desc" data-i18n="sort_largest">Largest first</option>
-            <option value="size-asc" data-i18n="sort_smallest">Smallest first</option>
-            <option value="type-asc" data-i18n="sort_type">Type</option>
-        </select>
+    <div class="nav-context hidden" id="navContextControls">
+        <select class="nav-scope-select" id="scopeSelect" onchange="onScopeChange()" aria-label="Filesystem scope"></select>
+        <button class="btn btn-secondary btn-sm nav-hidden-toggle" id="btnHiddenToggle" onclick="toggleHiddenFiles()" type="button" hidden></button>
+        <button class="btn btn-secondary btn-sm nav-view-toggle" id="btnViewMode" onclick="toggleViewMode()" type="button"></button>
     </div>
+    <select class="sort-select" id="sortSelect" onchange="onSortChange()">
+        <option value="name-asc" data-i18n="sort_name_asc">Name A-Z</option>
+        <option value="name-desc" data-i18n="sort_name_desc">Name Z-A</option>
+        <option value="date-desc" data-i18n="sort_newest">Newest first</option>
+        <option value="date-asc" data-i18n="sort_oldest">Oldest first</option>
+        <option value="size-desc" data-i18n="sort_largest">Largest first</option>
+        <option value="size-asc" data-i18n="sort_smallest">Smallest first</option>
+        <option value="type-asc" data-i18n="sort_type">Type</option>
+    </select>
 </div>
 
 <!-- Upload Drop Zone -->
@@ -2460,7 +2518,7 @@ html, body {
         var btn = document.getElementById('btnViewMode');
         if (!btn) return;
         var label = getViewModeLabel(viewMode);
-        btn.innerHTML = getViewModeIcon(viewMode) + '<span>' + escapeHtml(label) + '</span>';
+        btn.innerHTML = getViewModeIcon(viewMode);
         btn.title = label;
         btn.setAttribute('aria-label', label);
         setFileListViewMode();
@@ -2481,34 +2539,46 @@ html, body {
         defaultScope = normalizeScope(data && data.default_scope);
         canShowHidden = !!(data && data.can_show_hidden);
         showHiddenFiles = !!(data && data.include_hidden);
+        if (!availableScopes.length) {
+            availableScopes.push({ id: defaultScope || 'storage' });
+        }
+        if (canShowHidden && !availableScopes.some(function(scope) { return scope && scope.id === 'system'; })) {
+            availableScopes.push({ id: 'system' });
+        }
         currentScope = normalizeScope((data && data.current_scope) || currentScope || defaultScope);
     }
 
     function updateNavigationContextUI() {
+        var wrap = document.getElementById('navContextControls');
         var scopeSelect = document.getElementById('scopeSelect');
         var hiddenBtn = document.getElementById('btnHiddenToggle');
+        var viewBtn = document.getElementById('btnViewMode');
 
-        if (scopeSelect) {
-            scopeSelect.innerHTML = '';
-            for (var i = 0; i < availableScopes.length; i++) {
-                var scope = availableScopes[i];
-                var option = document.createElement('option');
-                option.value = scope.id;
-                option.textContent = getScopeLabel(scope.id);
-                scopeSelect.appendChild(option);
-            }
-            scopeSelect.value = currentScope;
-            scopeSelect.hidden = availableScopes.length <= 1;
+        if (!wrap || !scopeSelect || !hiddenBtn || !viewBtn) {
+            return;
         }
 
-        if (hiddenBtn) {
-            var hiddenLabel = showHiddenFiles ? t('hide_hidden_files') : t('show_hidden_files');
-            hiddenBtn.innerHTML = (showHiddenFiles ? icons.eye : icons.eyeOff) + '<span>' + escapeHtml(hiddenLabel) + '</span>';
-            hiddenBtn.title = hiddenLabel;
-            hiddenBtn.setAttribute('aria-label', hiddenLabel);
-            hiddenBtn.hidden = !canShowHidden;
-            hiddenBtn.classList.toggle('active', canShowHidden && showHiddenFiles);
+        scopeSelect.innerHTML = '';
+        for (var i = 0; i < availableScopes.length; i++) {
+            var scope = availableScopes[i];
+            var option = document.createElement('option');
+            option.value = scope.id;
+            option.textContent = getScopeLabel(scope.id);
+            scopeSelect.appendChild(option);
         }
+        scopeSelect.value = currentScope;
+        scopeSelect.hidden = availableScopes.length <= 1;
+
+        var hiddenLabel = showHiddenFiles ? t('hide_hidden_files') : t('show_hidden_files');
+        hiddenBtn.innerHTML = showHiddenFiles ? icons.eye : icons.eyeOff;
+        hiddenBtn.title = hiddenLabel;
+        hiddenBtn.setAttribute('aria-label', hiddenLabel);
+        hiddenBtn.hidden = !canShowHidden;
+        hiddenBtn.classList.toggle('active', canShowHidden && showHiddenFiles);
+        hiddenBtn.setAttribute('aria-pressed', canShowHidden && showHiddenFiles ? 'true' : 'false');
+
+        viewBtn.hidden = false;
+        wrap.classList.toggle('hidden', scopeSelect.hidden && hiddenBtn.hidden && viewBtn.hidden);
     }
 
     function buildHistoryURL(path, scope, detail) {

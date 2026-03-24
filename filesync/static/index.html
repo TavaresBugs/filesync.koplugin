@@ -2835,6 +2835,7 @@ html, body {
             deleted_successfully: "Deleted successfully",
             folder_created: "Folder created",
             uploaded: "uploaded",
+            downloading_selected: "Downloading {count} items",
             cancelled: "Cancelled",
             rename_failed: "Rename failed:",
             delete_failed: "Delete failed:",
@@ -2944,6 +2945,7 @@ html, body {
             deleted_successfully: "Eliminado exitosamente",
             folder_created: "Carpeta creada",
             uploaded: "subido",
+            downloading_selected: "Descargando {count} elementos",
             cancelled: "Cancelado",
             rename_failed: "Error al renombrar:",
             delete_failed: "Error al eliminar:",
@@ -3053,6 +3055,7 @@ html, body {
             deleted_successfully: "Exclu\u00eddo com sucesso",
             folder_created: "Pasta criada",
             uploaded: "enviado",
+            downloading_selected: "Baixando {count} itens",
             cancelled: "Cancelado",
             rename_failed: "Erro ao renomear:",
             delete_failed: "Erro ao excluir:",
@@ -3162,6 +3165,7 @@ html, body {
             deleted_successfully: "删除成功",
             folder_created: "文件夹已创建",
             uploaded: "已上传",
+            downloading_selected: "正在下载 {count} 项",
             cancelled: "已取消",
             rename_failed: "重命名失败：",
             delete_failed: "删除失败：",
@@ -3947,7 +3951,13 @@ html, body {
     };
 
     // ===== File Operations =====
-    window.downloadFile = function(path) {
+    window.downloadFile = function(path, options) {
+        options = options || {};
+        var entry = getEntryByPath(path);
+        if (!options.silent) {
+            var label = entry && entry.name ? entry.name : path;
+            showToast(t('downloading') + ' ' + label, 'info');
+        }
         var a = document.createElement('a');
         a.href = '/api/download?path=' + encodeURIComponent(path) + '&scope=' + encodeURIComponent(currentScope);
         a.download = '';
@@ -4245,9 +4255,15 @@ html, body {
 
     window.downloadSelectedItems = function() {
         if (!selectedPaths.length) return;
-        for (var i = 0; i < selectedPaths.length; i++) {
-            downloadFile(selectedPaths[i]);
+        if (selectedPaths.length === 1) {
+            downloadFile(selectedPaths[0]);
+        } else {
+            showToast(t('downloading_selected').replace('{count}', selectedPaths.length), 'info');
+            for (var i = 0; i < selectedPaths.length; i++) {
+                downloadFile(selectedPaths[i], { silent: true });
+            }
         }
+        window.cancelSelection();
     };
 
     window.pasteClipboardItems = async function() {
@@ -4468,7 +4484,6 @@ html, body {
 
     window.detailDownload = function() {
         if (currentDetailEntry) {
-            showToast(t('downloading') + ' ' + currentDetailEntry.name, 'info');
             downloadFile(currentDetailEntry.path);
         }
     };

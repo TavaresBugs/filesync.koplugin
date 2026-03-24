@@ -30,8 +30,10 @@
     --surface: #ffffff;
     --surface-hover: #f0f2f5;
     --surface-raised: #ffffff;
+    --surface-raised-hover: #f7f9fc;
     --border: #e2e5e9;
     --border-light: #eef0f3;
+    --card-border: #e2e5e9;
     --text: #1a1d23;
     --text-secondary: #6b7280;
     --text-tertiary: #9ca3af;
@@ -46,6 +48,8 @@
     --warning: #f59e0b;
     --warning-light: #fffbeb;
     --focus-ring: rgba(59, 130, 246, 0.1);
+    --selection-border: rgba(59, 130, 246, 0.3);
+    --selection-marker-color: #fff;
     --selection-bar-surface: rgba(255, 255, 255, 0.88);
     --selection-bar-border: rgba(226, 229, 233, 0.92);
     --selection-bar-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
@@ -56,16 +60,36 @@
     --selection-close-bg: #1f2937;
     --selection-close-color: #fff;
     --layout-max-width: 920px;
+    --file-table-columns: 44px minmax(0, 1fr) 90px 110px 80px 96px;
+    --file-table-columns-selection: 24px 44px minmax(0, 1fr) 90px 110px 80px 96px;
     --file-icon-dir-bg: #fef3c7;
     --file-icon-dir-text: #d97706;
     --file-icon-hidden-dir-bg: #edf7ee;
     --file-icon-hidden-dir-text: #4b6b46;
     --file-hidden-name: #3f4f3d;
     --file-hidden-meta: #7b8a78;
+    --file-icon-pdf-bg: #dbe8ff;
+    --file-icon-pdf-text: #3159a6;
+    --file-icon-reader-bg: #eef2ff;
+    --file-icon-reader-text: #5b21b6;
+    --file-icon-comic-bg: #fff7ed;
+    --file-icon-comic-text: #ea580c;
     --file-icon-document-bg: #f0fdf4;
     --file-icon-document-text: #16a34a;
+    --file-icon-text-bg: #ecfeff;
+    --file-icon-text-text: #0f766e;
+    --file-icon-markdown-bg: #d7fae8;
+    --file-icon-markdown-text: #0b8b61;
     --file-icon-image-bg: #fdf2f8;
     --file-icon-image-text: #db2777;
+    --file-icon-archive-bg: #f5f3ff;
+    --file-icon-archive-text: #7c3aed;
+    --file-icon-audio-bg: #eff6ff;
+    --file-icon-audio-text: #2563eb;
+    --file-icon-video-bg: #fff1f2;
+    --file-icon-video-text: #e11d48;
+    --file-icon-code-bg: #ede9fe;
+    --file-icon-code-text: #6d28d9;
     --file-icon-file-bg: #f1f5f9;
     --file-icon-file-text: #64748b;
     --radius: 12px;
@@ -82,8 +106,10 @@
     --surface: #171c24;
     --surface-hover: #202733;
     --surface-raised: #1f2632;
+    --surface-raised-hover: #27303d;
     --border: #2d3541;
     --border-light: #252d39;
+    --card-border: #303948;
     --text: #e5e7eb;
     --text-secondary: #a8b1bd;
     --text-tertiary: #7b8694;
@@ -98,6 +124,8 @@
     --warning: #f4c66d;
     --warning-light: #5f3c1f;
     --focus-ring: rgba(127, 176, 255, 0.18);
+    --selection-border: rgba(96, 165, 250, 0.35);
+    --selection-marker-color: #fff;
     --selection-bar-surface: rgba(23, 28, 36, 0.88);
     --selection-bar-border: rgba(82, 97, 119, 0.62);
     --selection-bar-shadow: 0 22px 46px rgba(0, 0, 0, 0.38);
@@ -107,16 +135,36 @@
     --selection-action-danger-hover-bg: rgba(118, 48, 57, 0.98);
     --selection-close-bg: #0f172a;
     --selection-close-color: #f8fafc;
+    --file-table-columns: 44px minmax(0, 1fr) 90px 110px 80px 96px;
+    --file-table-columns-selection: 24px 44px minmax(0, 1fr) 90px 110px 80px 96px;
     --file-icon-dir-bg: #6a4525;
     --file-icon-dir-text: #f2ca7a;
     --file-icon-hidden-dir-bg: #1a3a31;
     --file-icon-hidden-dir-text: #88ddb3;
     --file-hidden-name: #d1fae5;
     --file-hidden-meta: #7fb39a;
+    --file-icon-pdf-bg: #22385d;
+    --file-icon-pdf-text: #d9e7ff;
+    --file-icon-reader-bg: #2e2456;
+    --file-icon-reader-text: #c4b5fd;
+    --file-icon-comic-bg: #4a2a19;
+    --file-icon-comic-text: #fdba74;
     --file-icon-document-bg: #173d31;
     --file-icon-document-text: #63d39a;
+    --file-icon-text-bg: #14353a;
+    --file-icon-text-text: #67e8f9;
+    --file-icon-markdown-bg: #13362d;
+    --file-icon-markdown-text: #79f0c0;
     --file-icon-image-bg: #5a2440;
     --file-icon-image-text: #f2a8cc;
+    --file-icon-archive-bg: #332a55;
+    --file-icon-archive-text: #c4b5fd;
+    --file-icon-audio-bg: #1b3356;
+    --file-icon-audio-text: #93c5fd;
+    --file-icon-video-bg: #4b1d32;
+    --file-icon-video-text: #fda4af;
+    --file-icon-code-bg: #332457;
+    --file-icon-code-text: #d8b4fe;
     --file-icon-file-bg: #2d394a;
     --file-icon-file-text: #a9b8cb;
     --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
@@ -566,7 +614,34 @@ html, body {
 .file-list {
     max-width: var(--layout-max-width);
     margin: 0 auto;
-    padding: 4px 16px 100px;
+    padding: 4px 8px calc(124px + env(safe-area-inset-bottom, 0px));
+}
+
+.file-list-header {
+    display: none;
+}
+
+.file-list-header button {
+    font: inherit;
+}
+
+.file-list.view-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+
+.file-list.view-grid-large {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+}
+
+.file-list.view-grid .loading,
+.file-list.view-grid .empty-state,
+.file-list.view-grid-large .loading,
+.file-list.view-grid-large .empty-state {
+    grid-column: 1 / -1;
 }
 
 .file-item {
@@ -574,15 +649,184 @@ html, body {
     align-items: center;
     gap: 12px;
     padding: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border-light);
+    background: var(--surface-raised);
+    border: 1px solid var(--card-border);
     border-radius: var(--radius);
     margin-bottom: 6px;
     cursor: pointer;
     transition: all var(--transition);
 }
 
+.file-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.file-list.view-grid .file-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+        "main"
+        "actions";
+    align-items: start;
+    gap: 10px;
+    min-height: 132px;
+    margin-bottom: 0;
+}
+
+.file-list.view-grid .file-item.selection-mode {
+    padding-left: 12px;
+}
+
+.file-list.view-grid .file-select-marker {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
+.file-list.view-grid .file-main {
+    grid-area: main;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
+}
+
+.file-list.view-grid .file-icon {
+    width: 42px;
+    height: 42px;
+}
+
+.file-list.view-grid .file-info {
+    width: auto;
+    min-width: 0;
+    padding-top: 2px;
+}
+
+.file-list.view-grid .file-name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+    line-height: 1.35;
+}
+
+.file-list.view-grid .file-meta {
+    margin-top: 6px;
+    gap: 2px;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.file-list.view-grid .file-actions {
+    grid-area: actions;
+    width: 100%;
+    margin-top: 4px;
+    justify-content: flex-end;
+}
+
+.file-list.view-grid .file-actions .file-chevron {
+    margin-left: auto;
+}
+
+.file-list.view-grid-large .file-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    min-height: 176px;
+    padding: 18px 14px 14px;
+    margin-bottom: 0;
+    text-align: center;
+}
+
+.file-list.view-grid-large .file-item.selection-mode {
+    padding-left: 14px;
+}
+
+.file-list.view-grid-large .file-select-marker {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
+.file-list.view-grid-large .file-main {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.file-list.view-grid-large .file-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+}
+
+.file-list.view-grid-large .file-icon svg {
+    width: 32px;
+    height: 32px;
+}
+
+.file-list.view-grid-large .file-info {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.file-list.view-grid-large .file-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    text-align: center;
+    line-height: 1.35;
+}
+
+.file-list.view-grid-large .file-meta {
+    margin-top: 0;
+    gap: 4px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.file-list.view-grid-large .file-meta span:first-child {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.file-list.view-grid-large .file-meta span:last-child {
+    display: none;
+}
+
+.file-list.view-grid-large .file-actions {
+    width: 100%;
+    margin-top: auto;
+    justify-content: flex-end;
+}
+
+.file-list.view-grid-large .file-actions .file-chevron {
+    display: none;
+}
+
 .file-item:hover {
+    background: var(--surface-raised-hover);
     border-color: var(--border);
     box-shadow: var(--shadow);
     transform: translateY(-1px);
@@ -597,7 +841,7 @@ html, body {
 }
 
 .file-item.selected {
-    border-color: rgba(59, 130, 246, 0.3);
+    border-color: var(--selection-border);
     background: var(--primary-light);
 }
 
@@ -607,7 +851,7 @@ html, body {
     border-radius: 999px;
     border: 1.5px solid var(--border);
     background: var(--surface);
-    color: #fff;
+    color: var(--selection-marker-color);
     display: none;
     align-items: center;
     justify-content: center;
@@ -635,14 +879,6 @@ html, body {
     opacity: 1;
 }
 
-.file-item.is-hidden .file-name {
-    color: var(--file-hidden-name);
-}
-
-.file-item.is-hidden .file-meta {
-    color: var(--file-hidden-meta);
-}
-
 .file-icon {
     width: 40px;
     height: 40px;
@@ -663,9 +899,37 @@ html, body {
     color: var(--file-icon-dir-text);
 }
 
+.file-item.is-hidden .file-icon.dir {
+    background: var(--file-icon-hidden-dir-bg);
+    color: var(--file-icon-hidden-dir-text);
+}
+
+.file-item.is-hidden .file-name {
+    color: var(--file-hidden-name);
+}
+
+.file-item.is-hidden .file-meta {
+    color: var(--file-hidden-meta);
+}
+
 .file-icon.ebook {
     background: var(--primary-light);
     color: var(--primary);
+}
+
+.file-icon.pdf {
+    background: var(--file-icon-pdf-bg);
+    color: var(--file-icon-pdf-text);
+}
+
+.file-icon.reader {
+    background: var(--file-icon-reader-bg);
+    color: var(--file-icon-reader-text);
+}
+
+.file-icon.comic {
+    background: var(--file-icon-comic-bg);
+    color: var(--file-icon-comic-text);
 }
 
 .file-icon.document {
@@ -673,19 +937,44 @@ html, body {
     color: var(--file-icon-document-text);
 }
 
+.file-icon.text {
+    background: var(--file-icon-text-bg);
+    color: var(--file-icon-text-text);
+}
+
+.file-icon.markdown {
+    background: var(--file-icon-markdown-bg);
+    color: var(--file-icon-markdown-text);
+}
+
 .file-icon.image {
     background: var(--file-icon-image-bg);
     color: var(--file-icon-image-text);
 }
 
+.file-icon.archive {
+    background: var(--file-icon-archive-bg);
+    color: var(--file-icon-archive-text);
+}
+
+.file-icon.audio {
+    background: var(--file-icon-audio-bg);
+    color: var(--file-icon-audio-text);
+}
+
+.file-icon.video {
+    background: var(--file-icon-video-bg);
+    color: var(--file-icon-video-text);
+}
+
+.file-icon.code {
+    background: var(--file-icon-code-bg);
+    color: var(--file-icon-code-text);
+}
+
 .file-icon.file {
     background: var(--file-icon-file-bg);
     color: var(--file-icon-file-text);
-}
-
-.file-item.is-hidden .file-icon.dir {
-    background: var(--file-icon-hidden-dir-bg);
-    color: var(--file-icon-hidden-dir-text);
 }
 
 .file-info {
@@ -709,6 +998,10 @@ html, body {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.file-table-cell {
+    display: none;
 }
 
 .file-actions {
@@ -738,86 +1031,233 @@ html, body {
     display: none;
 }
 
-.file-list.view-grid,
-.file-list.view-grid-large {
-    display: grid;
-    gap: 12px;
-}
+@media (min-width: 920px) {
+    .file-list-header.visible {
+        max-width: var(--layout-max-width);
+        margin: 0 auto 8px;
+        padding: 0 14px 10px 8px;
+        display: grid;
+        grid-template-columns: var(--file-table-columns);
+        gap: 12px;
+        align-items: center;
+        border-bottom: 1px solid var(--border-light);
+    }
 
-.file-list.view-grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
+    body.selection-mode-active .file-list-header.visible {
+        grid-template-columns: var(--file-table-columns-selection);
+    }
 
-.file-list.view-grid-large {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
+    .file-list-header-cell {
+        min-width: 0;
+    }
 
-.file-list.view-grid .file-item,
-.file-list.view-grid-large .file-item {
-    position: relative;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    margin-bottom: 0;
-    min-height: 180px;
-    height: 100%;
-}
+    .file-list-header-cell.name {
+        grid-column: 2;
+    }
 
-.file-list.view-grid .file-select-marker,
-.file-list.view-grid-large .file-select-marker {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-}
+    body.selection-mode-active .file-list-header-cell.name {
+        grid-column: 3;
+    }
 
-.file-list.view-grid .file-item.selection-mode,
-.file-list.view-grid-large .file-item.selection-mode {
-    padding-left: 12px;
-}
+    .file-list-header-cell.size {
+        grid-column: 3;
+        text-align: center;
+    }
 
-.file-list.view-grid .file-icon,
-.file-list.view-grid-large .file-icon {
-    margin: 0 auto;
-}
+    body.selection-mode-active .file-list-header-cell.size {
+        grid-column: 4;
+    }
 
-.file-list.view-grid-large .file-icon {
-    width: 48px;
-    height: 48px;
-}
+    .file-list-header-cell.modified {
+        grid-column: 4;
+        text-align: center;
+    }
 
-.file-list.view-grid-large .file-icon svg {
-    width: 24px;
-    height: 24px;
-}
+    body.selection-mode-active .file-list-header-cell.modified {
+        grid-column: 5;
+    }
 
-.file-list.view-grid .file-info,
-.file-list.view-grid-large .file-info {
-    text-align: center;
-}
+    .file-list-header-cell.type {
+        grid-column: 5;
+        text-align: center;
+    }
 
-.file-list.view-grid .file-name,
-.file-list.view-grid-large .file-name {
-    white-space: normal;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-}
+    body.selection-mode-active .file-list-header-cell.type {
+        grid-column: 6;
+    }
 
-.file-list.view-grid .file-meta,
-.file-list.view-grid-large .file-meta {
-    justify-content: center;
-}
+    .file-list-header-button {
+        display: inline-flex;
+        width: 100%;
+        min-width: 0;
+        align-items: center;
+        gap: 4px;
+        border: 0;
+        padding: 2px 12px 2px 0;
+        background: transparent;
+        color: var(--text-tertiary);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        cursor: pointer;
+        white-space: nowrap;
+    }
 
-.file-list.view-grid .file-actions,
-.file-list.view-grid-large .file-actions {
-    margin-top: auto;
-    justify-content: flex-end;
-}
+    .file-list-header-cell.size .file-list-header-button,
+    .file-list-header-cell.modified .file-list-header-button,
+    .file-list-header-cell.type .file-list-header-button {
+        justify-content: center;
+    }
 
-.file-list.view-grid .file-actions .btn-icon,
-.file-list.view-grid-large .file-actions .btn-icon {
-    opacity: 1;
+    .file-list-header-button::after {
+        content: none;
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-top: 5px solid currentColor;
+        margin-left: 4px;
+        transform: translateY(1px);
+        transition: transform var(--transition);
+    }
+
+    .file-list-header-button.active {
+        color: var(--text);
+    }
+
+    .file-list-header-button.active::after {
+        content: "";
+    }
+
+    .file-list-header-button.active.desc::after {
+        transform: translateY(1px) rotate(180deg);
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-item {
+        display: grid;
+        grid-template-columns: var(--file-table-columns);
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px 10px 8px;
+        margin-bottom: 6px;
+        position: relative;
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-item {
+        grid-template-columns: var(--file-table-columns-selection);
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-item.selection-mode {
+        padding-left: 8px;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-select-marker {
+        position: absolute;
+        left: -9999px;
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-select-marker {
+        grid-column: 1;
+        justify-self: center;
+        position: static;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-main {
+        display: contents;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-icon {
+        grid-column: 1;
+        justify-self: start;
+        width: 42px;
+        height: 42px;
+        flex-shrink: 0;
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-icon {
+        grid-column: 2;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-info {
+        grid-column: 2;
+        align-self: center;
+        min-width: 0;
+        padding-right: 8px;
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-info {
+        grid-column: 3;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-name {
+        font-size: 15px;
+        font-weight: 600;
+        white-space: normal;
+        overflow: hidden;
+        text-overflow: clip;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-height: 1.35;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-meta {
+        display: none;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-table-cell {
+        display: block;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-table-size {
+        grid-column: 3;
+        text-align: center;
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-size {
+        grid-column: 4;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-table-date {
+        grid-column: 4;
+        text-align: center;
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-date {
+        grid-column: 5;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-table-type {
+        grid-column: 5;
+        text-align: center;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-type {
+        grid-column: 6;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-actions {
+        grid-column: 6;
+        justify-content: flex-end;
+        min-width: 68px;
+    }
+
+    body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-actions {
+        grid-column: 7;
+    }
+
+    .file-list:not(.view-grid):not(.view-grid-large) .file-actions .file-chevron {
+        display: none;
+    }
 }
 
 /* Always show actions on touch devices */
@@ -1872,6 +2312,21 @@ html, body {
     </div>
 </div>
 
+<div class="file-list-header" id="fileListHeader">
+    <div class="file-list-header-cell name">
+        <button class="file-list-header-button" id="sortByName" type="button" data-i18n="name_label" onclick="sortByColumn('name')">Name</button>
+    </div>
+    <div class="file-list-header-cell size">
+        <button class="file-list-header-button" id="sortBySize" type="button" data-i18n="size" onclick="sortByColumn('size')">Size</button>
+    </div>
+    <div class="file-list-header-cell modified">
+        <button class="file-list-header-button" id="sortByDate" type="button" data-i18n="modified" onclick="sortByColumn('date')">Modified</button>
+    </div>
+    <div class="file-list-header-cell type">
+        <button class="file-list-header-button" id="sortByType" type="button" data-i18n="sort_type" onclick="sortByColumn('type')">Type</button>
+    </div>
+</div>
+
 <!-- File List -->
 <div class="file-list" id="fileList"></div>
 
@@ -1965,6 +2420,7 @@ html, body {
             empty_folder: "This folder is empty",
             empty_folder_sub: "Upload files or create a new folder",
             folder_label: "Folder",
+            name_label: "Name",
             file_type: "File type",
             size: "Size",
             modified: "Modified",
@@ -2058,6 +2514,7 @@ html, body {
             empty_folder: "Esta carpeta est\u00e1 vac\u00eda",
             empty_folder_sub: "Sube archivos o crea una nueva carpeta",
             folder_label: "Carpeta",
+            name_label: "Nombre",
             file_type: "Tipo de archivo",
             size: "Tama\u00f1o",
             modified: "Modificado",
@@ -2151,6 +2608,7 @@ html, body {
             empty_folder: "Esta pasta est\u00e1 vazia",
             empty_folder_sub: "Envie arquivos ou crie uma nova pasta",
             folder_label: "Pasta",
+            name_label: "Nome",
             file_type: "Tipo de arquivo",
             size: "Tamanho",
             modified: "Modificado",
@@ -2235,6 +2693,7 @@ html, body {
             empty_folder: "此文件夹为空",
             empty_folder_sub: "上传文件或创建新文件夹",
             folder_label: "文件夹",
+            name_label: "名称",
             file_type: "文件类型",
             size: "大小",
             modified: "修改时间",
@@ -2444,10 +2903,19 @@ html, body {
     // ===== Icons =====
     var icons = {
         home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5L12 4l9 7.5"/><path d="M5 10.5V20h14v-9.5"/><path d="M10 20v-6h4v6"/></svg>',
-        dir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>',
+        dir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 015.5 5H10l2 2h6.5A2.5 2.5 0 0121 9.5v7A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/></svg>',
         ebook: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
+        pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8.5L19 6.5V20a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" fill="currentColor" fill-opacity="0.13" stroke="currentColor"/><path d="M14 2v5h5"/><text x="5" y="17" font-family="system-ui,sans-serif" font-size="5.2" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.3">PDF</text></svg>',
+        reader: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2"/><path d="M9 6.5h6"/><path d="M9 16.5h6"/><path d="M12 19h.01"/></svg>',
+        comic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 4v16"/><path d="M13 4v16"/><path d="M3 10h18"/></svg>',
         document: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+        text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="3" fill="currentColor" fill-opacity="0.13" stroke="currentColor"/><path d="M7 8.2h10"/><text x="4.25" y="16.1" font-family="system-ui,sans-serif" font-size="6.1" font-weight="800" fill="currentColor" stroke="none" letter-spacing="0.25">TXT</text></svg>',
+        markdown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="3" fill="currentColor" fill-opacity="0.13" stroke="currentColor"/><text x="4.4" y="15.8" font-family="system-ui,sans-serif" font-size="7.4" font-weight="800" fill="currentColor" stroke="none">M↓</text></svg>',
         image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+        archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8"/><path d="M1 8h22"/><path d="M10 12h4"/><path d="M10 16h4"/><path d="M9 3h6v5H9z"/></svg>',
+        audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>',
+        video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>',
+        code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.95" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2.6"/><path d="M7.1 10.2l2.4 1.8-2.4 1.8"/><path d="M12.1 14.1h4.8"/></svg>',
         file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 12 10 16 18 8"/></svg>',
         eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -2457,9 +2925,139 @@ html, body {
         viewGridLarge: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1.2"/><rect x="14" y="4" width="6" height="6" rx="1.2"/><rect x="4" y="14" width="6" height="6" rx="1.2"/><rect x="14" y="14" width="6" height="6" rx="1.2"/></svg>',
         download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
         rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>',
+        save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/><path d="M8 4v6h8V4"/><path d="M9 18h6"/></svg>',
+        folderAdd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><path d="M12 11v6"/><path d="M9 14h6"/></svg>',
         trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>',
         empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>'
     };
+
+    var FILE_TYPE_BY_COMPOUND_EXTENSION = {
+        'fb2.zip': 'ebook',
+        'epub.zip': 'ebook',
+        'cbz.zip': 'comic'
+    };
+
+    var FILE_TYPE_BY_FILENAME = {
+        'dockerfile': 'code',
+        'makefile': 'code',
+        'justfile': 'code',
+        'cmakelists.txt': 'code',
+        '.bashrc': 'code',
+        '.zshrc': 'code',
+        '.profile': 'code',
+        '.gitignore': 'code',
+        '.gitattributes': 'code',
+        '.gitmodules': 'code',
+        '.editorconfig': 'code',
+        '.env': 'code'
+    };
+
+    var FILE_TYPE_BY_EXTENSION = {
+        epub: 'ebook',
+        fb2: 'ebook',
+        lit: 'ebook',
+        pdb: 'ebook',
+        prc: 'ebook',
+        mobi: 'reader',
+        azw: 'reader',
+        azw3: 'reader',
+        kfx: 'reader',
+        pdf: 'pdf',
+        djvu: 'pdf',
+        cbz: 'comic',
+        cbr: 'comic',
+        txt: 'text',
+        md: 'markdown',
+        markdown: 'markdown',
+        mkd: 'markdown',
+        mdown: 'markdown',
+        rtf: 'text',
+        doc: 'document',
+        docx: 'document',
+        chm: 'document',
+        html: 'code',
+        htm: 'code',
+        png: 'image',
+        jpg: 'image',
+        jpeg: 'image',
+        gif: 'image',
+        svg: 'image',
+        bmp: 'image',
+        webp: 'image',
+        zip: 'archive',
+        gz: 'archive',
+        tar: 'archive',
+        bz2: 'archive',
+        xz: 'archive',
+        rar: 'archive',
+        '7z': 'archive',
+        mp3: 'audio',
+        m4a: 'audio',
+        aac: 'audio',
+        wav: 'audio',
+        ogg: 'audio',
+        flac: 'audio',
+        mp4: 'video',
+        mkv: 'video',
+        avi: 'video',
+        mov: 'video',
+        webm: 'video',
+        lua: 'code',
+        js: 'code',
+        ts: 'code',
+        jsx: 'code',
+        tsx: 'code',
+        mjs: 'code',
+        cjs: 'code',
+        json: 'code',
+        xml: 'code',
+        yml: 'code',
+        yaml: 'code',
+        toml: 'code',
+        ini: 'code',
+        cfg: 'code',
+        conf: 'code',
+        log: 'code',
+        sh: 'code',
+        bash: 'code',
+        zsh: 'code',
+        py: 'code',
+        rb: 'code',
+        php: 'code',
+        go: 'code',
+        rs: 'code',
+        c: 'code',
+        cpp: 'code',
+        h: 'code',
+        hpp: 'code',
+        java: 'code',
+        css: 'code',
+        scss: 'code',
+        sass: 'code',
+        less: 'code',
+        sql: 'code'
+    };
+
+    function getTypeClassFromFilename(name) {
+        var lowerName = String(name || '').toLowerCase();
+        if (!lowerName) return '';
+        if (FILE_TYPE_BY_FILENAME[lowerName]) {
+            return FILE_TYPE_BY_FILENAME[lowerName];
+        }
+        var compoundMatch = lowerName.match(/\.([^.]+\.[^.]+)$/);
+        if (compoundMatch && FILE_TYPE_BY_COMPOUND_EXTENSION[compoundMatch[1]]) {
+            return FILE_TYPE_BY_COMPOUND_EXTENSION[compoundMatch[1]];
+        }
+        var extMatch = lowerName.match(/\.([^.]+)$/);
+        if (!extMatch) return '';
+        return FILE_TYPE_BY_EXTENSION[extMatch[1]] || '';
+    }
+
+    function resolveEntryTypeClass(entry) {
+        if (!entry) return 'file';
+        if (entry.is_dir) return 'dir';
+        return getTypeClassFromFilename(entry.name) || entry.type || 'file';
+    }
 
     // ===== API =====
     async function api(method, url, body) {
@@ -2494,12 +3092,8 @@ html, body {
     function setFileListViewMode() {
         var list = document.getElementById('fileList');
         if (!list) return;
-        list.classList.remove('view-grid', 'view-grid-large');
-        if (viewMode === 'grid') {
-            list.classList.add('view-grid');
-        } else if (viewMode === 'grid-large') {
-            list.classList.add('view-grid-large');
-        }
+        list.classList.toggle('view-grid', viewMode === 'grid');
+        list.classList.toggle('view-grid-large', viewMode === 'grid-large');
     }
 
     function getViewModeLabel(mode) {
@@ -2514,14 +3108,75 @@ html, body {
         return icons.viewList;
     }
 
+    function syncSortSelect() {
+        var sortSelect = document.getElementById('sortSelect');
+        if (!sortSelect) return;
+        var value = currentSort + '-' + currentOrder;
+        if (sortSelect.querySelector('option[value="' + value + '"]')) {
+            sortSelect.value = value;
+            return;
+        }
+        if (currentSort === 'type') {
+            sortSelect.value = 'type-asc';
+            return;
+        }
+        sortSelect.value = 'name-asc';
+    }
+
+    function updateListHeaderSortUI() {
+        var buttons = {
+            name: document.getElementById('sortByName'),
+            size: document.getElementById('sortBySize'),
+            date: document.getElementById('sortByDate'),
+            type: document.getElementById('sortByType')
+        };
+
+        for (var key in buttons) {
+            if (!buttons[key]) continue;
+            var isActive = currentSort === key;
+            buttons[key].classList.toggle('active', isActive);
+            buttons[key].classList.toggle('asc', isActive && currentOrder === 'asc');
+            buttons[key].classList.toggle('desc', isActive && currentOrder === 'desc');
+            buttons[key].setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        }
+    }
+
+    function updateSortControlsUI() {
+        var sortSelect = document.getElementById('sortSelect');
+        if (sortSelect) {
+            sortSelect.hidden = viewMode === 'list';
+            syncSortSelect();
+        }
+        updateListHeaderSortUI();
+    }
+
+    function applySort(sortKey, order, shouldLoad) {
+        currentSort = sortKey;
+        currentOrder = order;
+        updateSortControlsUI();
+        if (shouldLoad !== false) {
+            loadFiles();
+        }
+    }
+
     function updateViewModeUI() {
+        var list = document.getElementById('fileList');
+        var header = document.getElementById('fileListHeader');
         var btn = document.getElementById('btnViewMode');
         if (!btn) return;
         var label = getViewModeLabel(viewMode);
         btn.innerHTML = getViewModeIcon(viewMode);
         btn.title = label;
         btn.setAttribute('aria-label', label);
-        setFileListViewMode();
+        if (list) {
+            list.classList.toggle('view-grid', viewMode === 'grid');
+            list.classList.toggle('view-grid-large', viewMode === 'grid-large');
+        }
+        if (header) {
+            header.classList.toggle('visible', viewMode === 'list' && !!(currentEntries && currentEntries.length));
+        }
+        updateNavigationContextUI();
+        updateSortControlsUI();
     }
 
     function getNextViewMode() {
@@ -2714,27 +3369,33 @@ html, body {
             list.innerHTML = '<div class="empty-state">' + icons.empty +
                 '<div class="empty-state-text">' + escapeHtml(t('empty_folder')) + '</div>' +
                 '<div class="empty-state-sub">' + escapeHtml(t('empty_folder_sub')) + '</div></div>';
+            updateViewModeUI();
             return;
         }
 
         var html = '';
         for (var idx = 0; idx < entries.length; idx++) {
             var entry = entries[idx];
-            var typeClass = entry.is_dir ? 'dir' : (entry.type || 'file');
+            var typeClass = resolveEntryTypeClass(entry);
             var icon = icons[typeClass] || icons.file;
             var date = entry.modified ? formatDate(entry.modified) : '';
             var size = entry.is_dir ? '' : (entry.size_formatted || '');
             var meta = [size, date].filter(Boolean).join(' &middot; ');
-            var ext = entry.name.split('.').pop().toUpperCase();
+            var tableSize = entry.is_dir ? '' : size;
+            var tableDate = date || '';
+            var extMatch = entry.name.match(/\.([^.]+)$/);
+            var ext = extMatch ? extMatch[1].toUpperCase() : t('unknown');
             var typeLabel = entry.is_dir ? t('folder_label') : ext;
+            var tableTypeLabel = entry.is_dir ? t('folder_label') : (extMatch ? '.' + extMatch[1].toLowerCase() : '—');
             var isSelected = selectedPaths.indexOf(entry.path) !== -1;
             var itemClass = 'file-item ' + (entry.is_dir ? 'is-dir' : 'is-file');
-            if (entry.is_hidden) itemClass += ' is-hidden';
+            if (entry.name && entry.name.charAt(0) === '.') itemClass += ' is-hidden';
             if (selectionMode) itemClass += ' selection-mode';
             if (isSelected) itemClass += ' selected';
 
             html += '<div class="' + itemClass + '" onclick="onFileClick(event, ' + (entry.is_dir ? 'true' : 'false') + ', \'' + escapeAttr(entry.path) + '\')">';
             html += '<div class="file-select-marker">' + icons.check + '</div>';
+            html += '<div class="file-main">';
             html += '<div class="file-icon ' + typeClass + '">' + icon + '</div>';
             html += '<div class="file-info">';
             html += '<div class="file-name">' + escapeHtml(entry.name) + '</div>';
@@ -2742,6 +3403,10 @@ html, body {
             if (typeLabel) html += '<span>' + escapeHtml(typeLabel) + '</span>';
             if (meta) html += '<span>' + meta + '</span>';
             html += '</div></div>';
+            html += '</div>';
+            html += '<div class="file-table-cell file-table-size">' + escapeHtml(tableSize) + '</div>';
+            html += '<div class="file-table-cell file-table-date">' + escapeHtml(tableDate) + '</div>';
+            html += '<div class="file-table-cell file-table-type">' + escapeHtml(tableTypeLabel) + '</div>';
             if (entry.is_dir) {
                 html += '<div class="file-actions">';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); downloadFile(\'' + escapeAttr(entry.path) + '\')" title="' + escapeHtml(t('download')) + '">' + icons.download + '</button>';
@@ -2759,7 +3424,7 @@ html, body {
             html += '</div>';
         }
         list.innerHTML = html;
-        setFileListViewMode();
+        updateViewModeUI();
     }
 
     window.onFileClick = function(event, isDir, path) {
@@ -3566,9 +4231,21 @@ html, body {
     window.onSortChange = function() {
         var val = document.getElementById('sortSelect').value;
         var parts = val.split('-');
-        currentSort = parts[0];
-        currentOrder = parts[1] || 'asc';
-        loadFiles();
+        applySort(parts[0], parts[1] || 'asc');
+    };
+
+    window.sortByColumn = function(sortKey) {
+        var nextOrder = 'asc';
+        if (sortKey === currentSort) {
+            if (sortKey === 'type') {
+                nextOrder = 'asc';
+            } else {
+                nextOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+            }
+        } else if (sortKey === 'date' || sortKey === 'size') {
+            nextOrder = 'desc';
+        }
+        applySort(sortKey, nextOrder);
     };
 
     window.onFilterChange = function() {

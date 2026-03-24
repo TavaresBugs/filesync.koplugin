@@ -705,6 +705,7 @@ html, body {
     gap: 10px;
     min-height: 132px;
     height: 132px;
+    box-sizing: border-box;
     margin-bottom: 0;
 }
 
@@ -760,6 +761,7 @@ html, body {
     grid-area: actions;
     width: 100%;
     margin-top: 4px;
+    height: 32px;
     min-height: 32px;
     justify-content: flex-end;
     align-items: center;
@@ -774,11 +776,12 @@ html, body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 14px;
     min-height: 176px;
     height: 176px;
     padding: 18px 14px 14px;
+    box-sizing: border-box;
     margin-bottom: 0;
     text-align: center;
 }
@@ -798,6 +801,9 @@ html, body {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 0;
     gap: 14px;
 }
 
@@ -854,6 +860,7 @@ html, body {
 .file-list.view-grid-large .file-actions {
     width: 100%;
     margin-top: auto;
+    height: 32px;
     min-height: 32px;
     justify-content: flex-end;
     align-items: center;
@@ -868,6 +875,11 @@ html, body {
     border-color: var(--border);
     box-shadow: var(--shadow);
     transform: translateY(-1px);
+}
+
+.file-list.view-grid .file-item:hover,
+.file-list.view-grid-large .file-item:hover {
+    transform: none;
 }
 
 .file-item:active {

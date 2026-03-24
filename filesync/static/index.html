@@ -4630,17 +4630,15 @@ html, body {
 
         var result = await executeClipboardOperation(operation);
 
-        if (operation.mode === 'cut') {
-            if (result.failures.length > 0) {
-                setClipboard('cut', result.failures.map(function(item) {
-                    return {
-                        path: item.path,
-                        scope: item.scope
-                    };
-                }));
-            } else {
-                clearClipboard();
-            }
+        if (result.failures.length > 0) {
+            setClipboard(operation.mode, result.failures.map(function(item) {
+                return {
+                    path: item.path,
+                    scope: item.scope
+                };
+            }));
+        } else {
+            clearClipboard();
         }
 
         if (result.completedPaths.length > 0) {
@@ -5673,6 +5671,19 @@ html, body {
 
         event.preventDefault();
         window.selectAllVisibleItems();
+    });
+
+    document.addEventListener('keydown', function(event) {
+        var pressedV = event.key === 'v' || event.key === 'V';
+        if (!pressedV || (!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) {
+            return;
+        }
+        if (isEditableTarget(event.target) || !hasClipboardItems()) {
+            return;
+        }
+
+        event.preventDefault();
+        window.pasteClipboardItems();
     });
 
     // ===== Init =====

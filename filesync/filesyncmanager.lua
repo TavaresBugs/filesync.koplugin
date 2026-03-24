@@ -126,6 +126,9 @@ end
 function FileSyncManager:setSafeMode(enabled)
     G_reader_settings:saveSetting("filesync_safe_mode", enabled)
     G_reader_settings:flush()
+    if enabled then
+        self:_resetRootUnlock()
+    end
 end
 
 function FileSyncManager:_normalizeRootPin(pin)
@@ -421,11 +424,17 @@ function FileSyncManager:getLocalIP()
     return nil
 end
 
---- Build the full URL for the server, omitting :80 for port 80.
--- This single function is the source of truth for the URL shown on
--- the QR screen, encoded in the QR code, and printed in the log.
+function FileSyncManager:_shouldOmitPortInURL(port)
+    return tonumber(port) == DEFAULT_PORT
+end
+
+--- Build the full URL for the server.
+--- Only omit the explicit port for the default HTTP port 80. Other ports,
+--- even if they are below 1024, still require :port in the browser URL.
+--- This single function is the source of truth for the URL shown on
+--- the QR screen, encoded in the QR code, and printed in the log.
 function FileSyncManager:buildURL(ip, port)
-    if tonumber(port) == 80 then
+    if self:_shouldOmitPortInURL(port) then
         return "http://" .. ip
     end
     return "http://" .. ip .. ":" .. port
@@ -670,17 +679,28 @@ function FileSyncManager:_buildStartServerErrorMessage(port, err, options)
     options = options or {}
     local fallback_port = options.fallback_port
     local fallback_err = options.fallback_err
+    local default_url = options.default_url
+    local fallback_url = options.fallback_url
 
     if self:_isPortInUseError(err) then
         if port == DEFAULT_PORT then
             if fallback_port and fallback_err then
                 if self:_isPortInUseError(fallback_err) then
+                    if default_url and fallback_url then
+                        return T(_("FileSync could not use the default address %1 because another service is already using port %2.\n\nFileSync then tried %3 automatically, but that address is already in use too.\n\nStop the other service, or change the Server Port setting to another free port such as 8081."), default_url, port, fallback_url)
+                    end
                     return T(_("FileSync tried to start on port %1, but another service is already using it.\n\nFileSync then tried port %2 automatically, but that port is already in use too.\n\nStop the other service, or change the Server Port setting to another free port such as 8081."), port, fallback_port)
                 end
 
+                if default_url then
+                    return T(_("FileSync could not use the default address %1 because another service is already using port %2.\n\nFileSync then tried port %3 automatically, but it also failed.\n\nSecond error: %4"), default_url, port, fallback_port, tostring(fallback_err))
+                end
                 return T(_("FileSync tried to start on port %1, but another service is already using it.\n\nFileSync then tried port %2 automatically, but it also failed.\n\nSecond error: %3"), port, fallback_port, tostring(fallback_err))
             end
 
+            if default_url then
+                return T(_("FileSync could not use the default address %1 because another service is already using port %2.\n\nStop the service using port %2, or change the Server Port setting to 8080 or higher."), default_url, port)
+            end
             return T(_("FileSync could not start because another service is already using port %1.\n\nStop the service using port %1, or change the Server Port setting to 8080 or higher."), port)
         end
 
@@ -780,6 +800,8 @@ function FileSyncManager:start(silent)
                 text = self:_buildStartServerErrorMessage(original_port, original_start_err or err, {
                     fallback_port = fallback_start_err and FALLBACK_PORT or nil,
                     fallback_err = fallback_start_err,
+                    default_url = self:buildURL(ip, original_port),
+                    fallback_url = fallback_start_err and self:buildURL(ip, FALLBACK_PORT) or nil,
                 }),
                 timeout = 8,
             })
@@ -829,7 +851,9 @@ function FileSyncManager:start(silent)
         self:showQRCode()
         if used_fallback_port then
             local fallback_message
-            if self:_isPortInUseError(original_start_err) then
+            if self:_isPortInUseError(original_start_err) and original_port == DEFAULT_PORT then
+                fallback_message = T(_("Port %1 was already in use, so FileSync could not use the default address %2.\n\nFileSync switched automatically to port %3.\n\nUse this address instead: %4"), original_port, self:buildURL(ip, original_port), port, self:buildURL(ip, port))
+            elseif self:_isPortInUseError(original_start_err) then
                 fallback_message = T(_("FileSync tried to start on port %1, but another service was already using it.\n\nTo avoid the conflict, FileSync switched automatically to port %2.\n\nUse this address: %3"), original_port, port, self:buildURL(ip, port))
             else
                 fallback_message = T(_("Port %1 was unavailable, so FileSync switched automatically to port %2.\n\nUse this address: %3"), original_port, port, self:buildURL(ip, port))

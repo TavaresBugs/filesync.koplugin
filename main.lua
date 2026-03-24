@@ -47,12 +47,45 @@ function FileSync:addToMainMenu(menu_items)
                     FileSyncManager:checkBatteryAndStart()
                 end
             end,
-            keep_menu_open = false,
+            keep_menu_open = true,
+        },
+        {
+            text = _("Safe mode"),
+            checked_func = function()
+                return FileSyncManager:getSafeMode()
+            end,
+            callback = function()
+                FileSyncManager:setSafeMode(not FileSyncManager:getSafeMode())
+            end,
+            keep_menu_open = true,
         },
         {
             text = _("Server port"),
             callback = function()
                 FileSyncManager:configurePort()
+            end,
+            keep_menu_open = true,
+        },
+        {
+            text = _("Show QR code"),
+            enabled_func = function()
+                return FileSyncManager:isRunning()
+            end,
+            callback = function()
+                FileSyncManager:showQRCode()
+            end,
+            keep_menu_open = false,
+        },
+        {
+            text = _("About"),
+            callback = function()
+                local UIManager = require("ui/uimanager")
+                local InfoMessage = require("ui/widget/infomessage")
+                local meta = getPluginMeta() or {}
+                local version = meta.version or "dev"
+                UIManager:show(InfoMessage:new{
+                    text = T(_("FileSync v%1\n\nWireless file manager for KOReader.\n\nStart the server, scan the QR code with your phone, and manage your books from any browser on the same WiFi network.\n\nProject:\ngithub.com/TavaresBugs/filesync.koplugin"), version),
+                })
             end,
             keep_menu_open = true,
         },
@@ -82,30 +115,6 @@ function FileSync:addToMainMenu(menu_items)
             keep_menu_open = false,
         })
     end
-
-    table.insert(sub_items, {
-        text = _("Show QR code"),
-        enabled_func = function()
-            return FileSyncManager:isRunning()
-        end,
-        callback = function()
-            FileSyncManager:showQRCode()
-        end,
-        keep_menu_open = false,
-    })
-    table.insert(sub_items, {
-        text = _("About"),
-        callback = function()
-            local UIManager = require("ui/uimanager")
-            local InfoMessage = require("ui/widget/infomessage")
-            local meta = getPluginMeta() or {}
-            local version = meta.version or "dev"
-            UIManager:show(InfoMessage:new{
-                text = T(_("FileSync v%1\n\nWireless file manager for KOReader.\n\nStart the server, scan the QR code with your phone, and manage your books from any browser on the same WiFi network.\n\nProject:\ngithub.com/TavaresBugs/filesync.koplugin"), version),
-            })
-        end,
-        keep_menu_open = true,
-    })
 
     menu_items.filesync = {
         text = _("FileSync"),

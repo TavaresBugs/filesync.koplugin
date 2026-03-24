@@ -3835,6 +3835,38 @@ html, body {
         };
     }
 
+    function shouldRecoverNavigationError(err) {
+        if (!err || err.code === 'network_error') {
+            return false;
+        }
+        return err.status === 400 || err.status === 403 || err.status === 404;
+    }
+
+    function redirectToDefaultHome() {
+        var homeScope = normalizeScope(defaultScope || currentScope);
+        var homePath = getDefaultStartPath(homeScope);
+
+        if (currentDetailEntry) {
+            _hideDetailInternal();
+        }
+        closeUploadZone();
+        selectionMode = false;
+        selectedPaths = [];
+        currentScope = homeScope;
+        currentPath = homePath;
+        currentFilter = '';
+        document.getElementById('searchInput').value = '';
+        updateSelectionUI();
+        updateParentNav();
+        updateNavigationContextUI();
+        history.replaceState(
+            { path: homePath, scope: homeScope, detail: false },
+            '',
+            buildHistoryURL(homePath, homeScope, false)
+        );
+        loadFiles({ skipRecovery: true });
+    }
+
     // ===== Navigation =====
     // Internal navigation: sets state and loads files WITHOUT pushing history
     function _navigateInternal(path, scope) {
@@ -3869,7 +3901,8 @@ html, body {
         }
     };
 
-    async function loadFiles() {
+    async function loadFiles(options) {
+        options = options || {};
         var list = document.getElementById('fileList');
         setFileListViewMode();
         list.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">' + escapeHtml(t('loading')) + '</div></div>';
@@ -3889,6 +3922,16 @@ html, body {
             renderBreadcrumbs(data.breadcrumbs);
             renderFiles(data.entries);
         } catch (err) {
+            var homeScope = normalizeScope(defaultScope || currentScope);
+            var homePath = getDefaultStartPath(homeScope);
+            var canRecover = !options.skipRecovery && shouldRecoverNavigationError(err)
+                && (currentPath !== homePath || currentScope !== homeScope);
+
+            if (canRecover) {
+                redirectToDefaultHome();
+                return;
+            }
+
             list.innerHTML = '<div class="empty-state">' + icons.empty +
                 '<div class="empty-state-text">' + escapeHtml(t('failed_to_load')) + '</div>' +
                 '<div class="empty-state-sub">' + escapeHtml(err.message) + '</div></div>';

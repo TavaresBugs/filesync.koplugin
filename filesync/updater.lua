@@ -496,25 +496,20 @@ function Updater:checkForUpdates()
 
     -- Check network availability
     if not NetworkMgr:isWifiOn() then
-        if manual then
-            UIManager:show(InfoMessage:new{
-                text = _("WiFi is not enabled. Please turn on WiFi and try again."),
-                timeout = 3,
-            })
-        end
+        UIManager:show(InfoMessage:new{
+            text = _("WiFi is not enabled. Please turn on WiFi and try again."),
+            timeout = 3,
+        })
         return
     end
 
-    -- Show a brief "checking" message for manual checks
-    local checking_msg
-    if manual then
-        checking_msg = InfoMessage:new{
-            text = _("Checking for updates..."),
-            timeout = 30,
-        }
-        UIManager:show(checking_msg)
-        UIManager:forceRePaint()
-    end
+    -- Show a brief "checking" message
+    local checking_msg = InfoMessage:new{
+        text = _("Checking for updates..."),
+        timeout = 30,
+    }
+    UIManager:show(checking_msg)
+    UIManager:forceRePaint()
 
     -- Perform the check in a scheduled callback to allow the UI to render
     UIManager:scheduleIn(0.1, function()
@@ -527,23 +522,19 @@ function Updater:checkForUpdates()
 
         if not release then
             logger.warn("FileSync Updater:", err)
-            if manual then
-                UIManager:show(InfoMessage:new{
-                    text = T(_("Could not check for updates.\n\n%1"), err),
-                    timeout = 5,
-                })
-            end
+            UIManager:show(InfoMessage:new{
+                text = T(_("Could not check for updates.\n\n%1"), err),
+                timeout = 5,
+            })
             return
         end
 
         local remote_version_str = release.tag_name
         if not remote_version_str then
-            if manual then
-                UIManager:show(InfoMessage:new{
-                    text = _("Could not determine the latest version."),
-                    timeout = 3,
-                })
-            end
+            UIManager:show(InfoMessage:new{
+                text = _("Could not determine the latest version."),
+                timeout = 3,
+            })
             return
         end
 
@@ -552,12 +543,10 @@ function Updater:checkForUpdates()
         local local_ver = self:_parseVersion(current_version_str)
 
         if not self:_isNewer(remote_ver, local_ver) then
-            if manual then
-                UIManager:show(InfoMessage:new{
-                    text = T(_("FileSync is up to date (v%1)."), current_version_str),
-                    timeout = 3,
-                })
-            end
+            UIManager:show(InfoMessage:new{
+                text = T(_("FileSync is up to date (v%1)."), current_version_str),
+                timeout = 3,
+            })
             return
         end
 

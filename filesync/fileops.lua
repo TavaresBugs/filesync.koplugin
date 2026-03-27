@@ -532,12 +532,248 @@ function FileOps:rename(old_rel_path, new_rel_path)
     return true
 end
 
+function FileOps:_validateDestinationPath(full_path)
+    local parent = full_path:match("(.+)/[^/]+$")
+    if parent then
+        local parent_attr = lfs.attributes(parent)
+        if not parent_attr or parent_attr.mode ~= "directory" then
+            return false, "Parent directory does not exist"
+        end
+    end
+
+    local name = full_path:match("([^/]+)$")
+    local valid, valid_err = self:_validateFilename(name)
+    if not valid then
+        return false, valid_err
+    end
+
+    return true
+end
+
+function FileOps:_isPathInside(parent_path, child_path)
+    return child_path:sub(1, #parent_path + 1) == parent_path .. "/"
+end
+
+function FileOps:_normalizeConflictStrategy(strategy)
+    if strategy == "replace" or strategy == "merge_replace" then
+        return strategy
+    end
+    return "error"
+end
+
+function FileOps:_describeEntryType(attr)
+    if not attr then
+        return nil
+    end
+    return attr.mode == "directory" and "directory" or "file"
+end
+
+function FileOps:_buildDestinationConflict(src_attr, dest_attr, dest_path, scope_id, extra)
+    local details = extra or {}
+    details.code = "destination_exists"
+    details.source_type = details.source_type or self:_describeEntryType(src_attr)
+    details.destination_type = details.destination_type or self:_describeEntryType(dest_attr)
+    details.can_merge = details.can_merge == true
+        or (details.source_type == "directory" and details.destination_type == "directory")
+    if dest_path and not details.destination_path then
+        details.destination_path = self:_getRelativePath(dest_path)
+    end
+    return details
+end
+
+function FileOps:_removeResolvedPath(full_path)
+    local attr = lfs.attributes(full_path)
+    if not attr then
+        return true
+    end
+
+    if attr.mode == "directory" then
+        local ok, err = self:_deleteRecursive(full_path)
+        if not ok then
+            return false, "Cannot delete existing destination: " .. tostring(err)
+        end
+        return true
+    end
+
+    local ok, err = os.remove(full_path)
+    if not ok then
+        return false, "Cannot delete existing destination: " .. tostring(err)
+    end
+    return true
+end
+
+--- Move a file or directory
+function FileOps:move(old_rel_path, new_rel_path, options)
+    options = options or {}
+    local old_path, err1 = self:_resolvePath(old_rel_path)
+    if not old_path then
+        return false, err1
+    end
+
+    local new_path, err2 = self:_resolvePath(new_rel_path)
+    if not new_path then
+        return false, err2
+    end
+
+    if old_path == self._root_dir or old_path == "/" then
+        return false, "Cannot move root directory"
+    end
+    if old_path == new_path then
+        return false, "Source and destination are the same path"
+    end
+
+    local src_attr = lfs.attributes(old_path)
+    if not src_attr then
+        return false, "Source does not exist"
+    end
+
+    local dest_attr = lfs.attributes(new_path)
+    if dest_attr then
+        local conflict_strategy = self:_normalizeConflictStrategy(options.conflict_strategy)
+        if conflict_strategy == "replace" then
+            local removed, remove_err = self:_removeResolvedPath(new_path)
+            if not removed then
+                return false, remove_err
+            end
+            dest_attr = nil
+        else
+            return false, "Destination already exists", self:_buildDestinationConflict(
+                src_attr,
+                dest_attr,
+                new_path,
+                nil,
+                { destination_path = new_rel_path }
+            )
+        end
+    end
+
+    local valid, valid_err = self:_validateDestinationPath(new_path)
+    if not valid then
+        return false, valid_err
+    end
+
+    if src_attr.mode == "directory" and self:_isPathInside(old_path, new_path) then
+        return false, "Cannot move directory inside itself"
+    end
+
+    local ok, move_err = os.rename(old_path, new_path)
+    if not ok then
+        if src_attr.mode == "file" then
+            local copied, copy_err = self:copyFile(old_rel_path, new_rel_path, options)
+            if not copied then
+                return false, copy_err
+            end
+            local removed, remove_err = os.remove(old_path)
+            if not removed then
+                return false, "Cannot remove source after copy: " .. tostring(remove_err)
+            end
+            logger.info("FileSync: Moved", old_path, "to", new_path, "using copy fallback")
+            return true
+        end
+        return false, "Cannot move: " .. tostring(move_err)
+    end
+
+    logger.info("FileSync: Moved", old_path, "to", new_path)
+    return true
+end
+
+--- Copy a file in chunks without loading it entirely into memory
+function FileOps:copyFile(src_rel_path, dst_rel_path, options)
+    options = options or {}
+    local src_path, err1 = self:_resolvePath(src_rel_path)
+    if not src_path then
+        return false, err1
+    end
+
+    local dst_path, err2 = self:_resolvePath(dst_rel_path)
+    if not dst_path then
+        return false, err2
+    end
+
+    local src_attr = lfs.attributes(src_path)
+    if not src_attr then
+        return false, "Source does not exist"
+    end
+    if src_path == dst_path then
+        return false, "Source and destination are the same file"
+    end
+    if src_attr.mode ~= "file" then
+        return false, "Copy only supports files"
+    end
+
+    local dest_attr = lfs.attributes(dst_path)
+    if dest_attr then
+        local conflict_strategy = self:_normalizeConflictStrategy(options.conflict_strategy)
+        if conflict_strategy == "replace" then
+            local removed, remove_err = self:_removeResolvedPath(dst_path)
+            if not removed then
+                return false, remove_err
+            end
+            dest_attr = nil
+        else
+            return false, "Destination already exists", self:_buildDestinationConflict(
+                src_attr,
+                dest_attr,
+                dst_path,
+                nil,
+                { destination_path = dst_rel_path }
+            )
+        end
+    end
+
+    local valid, valid_err = self:_validateDestinationPath(dst_path)
+    if not valid then
+        return false, valid_err
+    end
+
+    local src_file, src_err = io.open(src_path, "rb")
+    if not src_file then
+        return false, "Cannot open source file: " .. tostring(src_err)
+    end
+
+    local dst_file, dst_err = io.open(dst_path, "wb")
+    if not dst_file then
+        src_file:close()
+        return false, "Cannot create destination file: " .. tostring(dst_err)
+    end
+
+    local chunk_size = 65536
+    while true do
+        local chunk, read_err = src_file:read(chunk_size)
+        if read_err then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot read source file: " .. tostring(read_err)
+        end
+        if not chunk then break end
+        local write_ok, write_err = dst_file:write(chunk)
+        if not write_ok then
+            src_file:close()
+            dst_file:close()
+            os.remove(dst_path)
+            return false, "Cannot write destination file: " .. tostring(write_err)
+        end
+    end
+
+    local close_ok, close_err = dst_file:close()
+    src_file:close()
+    if close_ok == false then
+        os.remove(dst_path)
+        return false, "Cannot finalize destination file: " .. tostring(close_err)
+    end
+
+    logger.info("FileSync: Copied", src_path, "to", dst_path)
+    return true
+end
+
 --- Delete a file or directory (directory must be empty)
 --- @param rel_path string: relative path to delete
 --- @param options table|nil: optional settings
 ---   - safe_mode (bool): when true, auto-delete associated .sdr directory for book files
 ---   - delete_sdr (bool): when true (and not safe_mode), delete associated .sdr directory
 function FileOps:delete(rel_path, options)
+    options = options or {}
     local full_path, err = self:_resolvePath(rel_path)
     if not full_path then
         return false, err
@@ -556,7 +792,6 @@ function FileOps:delete(rel_path, options)
     local is_file = attr.mode ~= "directory"
 
     if attr.mode == "directory" then
-        -- Only allow deletion of empty directories (safety measure)
         local child_count = 0
         for child_name in lfs.dir(full_path) do
             if child_name ~= "." and child_name ~= ".." then
@@ -564,12 +799,19 @@ function FileOps:delete(rel_path, options)
                 break
             end
         end
-        if child_count > 0 then
-            return false, "Cannot delete non-empty directory"
-        end
-        local ok, del_err = lfs.rmdir(full_path)
-        if not ok then
-            return false, "Cannot delete directory: " .. tostring(del_err)
+
+        if child_count == 0 then
+            local ok, del_err = lfs.rmdir(full_path)
+            if not ok then
+                return false, "Cannot delete directory: " .. tostring(del_err)
+            end
+        elseif options.recursive == true then
+            local ok, del_err = self:_deleteRecursive(full_path)
+            if not ok then
+                return false, "Cannot delete directory: " .. tostring(del_err)
+            end
+        else
+            return false, "Cannot delete non-empty directory without recursive flag"
         end
     else
         local ok, del_err = os.remove(full_path)

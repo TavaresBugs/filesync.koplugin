@@ -326,12 +326,55 @@ function HttpServer:_route(client, method, path, query, headers, body)
                 self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})
             end
 
+        elseif method == "POST" and path == "/api/move" then
+            local data = self:_parseJSON(body)
+            if data and data.old_path and data.new_path then
+                local ok, err_msg, err_details = FileOps:move(data.old_path, data.new_path, {
+                    conflict_strategy = data.conflict_strategy,
+                })
+                if ok then
+                    self:_sendJSON(client, 200, {success = true})
+                else
+                    local payload = {error = err_msg or "Cannot move"}
+                    if err_details then
+                        for key, value in pairs(err_details) do
+                            payload[key] = value
+                        end
+                    end
+                    self:_sendJSON(client, err_details and err_details.code == "destination_exists" and 409 or 400, payload)
+                end
+            else
+                self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})
+            end
+
+        elseif method == "POST" and path == "/api/copy" then
+            local data = self:_parseJSON(body)
+            if data and data.old_path and data.new_path then
+                local ok, err_msg, err_details = FileOps:copyFile(data.old_path, data.new_path, {
+                    conflict_strategy = data.conflict_strategy,
+                })
+                if ok then
+                    self:_sendJSON(client, 200, {success = true})
+                else
+                    local payload = {error = err_msg or "Cannot copy"}
+                    if err_details then
+                        for key, value in pairs(err_details) do
+                            payload[key] = value
+                        end
+                    end
+                    self:_sendJSON(client, err_details and err_details.code == "destination_exists" and 409 or 400, payload)
+                end
+            else
+                self:_sendJSON(client, 400, {error = "Missing old_path or new_path"})
+            end
+
         elseif method == "POST" and path == "/api/delete" then
             local data = self:_parseJSON(body)
             if data and data.path then
                 local delete_options = {
                     safe_mode = safe_mode,
                     delete_sdr = data.delete_sdr == true,
+                    recursive = data.recursive == true,
                 }
                 local ok, err_msg = FileOps:delete(data.path, delete_options)
                 if ok then

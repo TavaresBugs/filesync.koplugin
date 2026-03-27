@@ -24,6 +24,7 @@ Works on **Kindle** and **Kobo** devices running KOReader.
 - **Create Folders** — Organize your library into directories
 - **Rename & Delete** — Limited file management with confirmation dialogs
 - **Search & Sort** — Filter by name, sort by name/size/date/type
+- **Sleep Prevention** — Keeps device awake and WiFi alive while the server runs
 - **Safe Mode** — Show only books and images, hiding system files
 - **Responsive UI** — Designed for smartphones, works on any screen
 
@@ -130,16 +131,26 @@ Once connected, the web interface lets you:
   <img src="screenshots/web-file-detail.png" alt="File detail view" width="250">
 </p>
 
+### Sleep Prevention
+
+While the file server is running, the plugin automatically prevents your device from going to sleep or suspending. This keeps the server accessible and WiFi connected without interruption. Specifically:
+
+- **Standby** and **suspend** are blocked so the device stays awake
+- **Auto-suspend** and **auto-standby** timers are temporarily disabled
+- **WiFi keepalive** is enabled to maintain the network connection
+
+All settings are restored to their previous values when the server is stopped. If the device somehow suspends (e.g., due to critically low battery), the server will automatically restart when the device wakes up.
+
 ### Stopping the Server
 
 - Tap **Stop file server** from the plugin menu, or
-- The server stops automatically when the device suspends and restarts on wake
+- The server stops automatically when you exit KOReader
 
 ### Changing the Port
 
 1. Open the plugin menu
 2. Tap **Server port**
-3. Enter port `80` or a port number between 1024 and 65535 (default: 8080)
+3. Enter a port number between 1 and 65535 (default: 80)
 4. Restart the server for the change to take effect
 
 ### Safe Mode

@@ -926,6 +926,14 @@ function FileSyncManager:preventStandby()
         return false, err
     end
 
+    local ok_share, PluginShare = pcall(require, "pluginshare")
+    if ok_share and type(PluginShare) == "table" then
+        PluginShare.pause_auto_suspend = true
+        logger.info("FileSync: Auto-suspend paused via PluginShare")
+    else
+        logger.warn("FileSync: PluginShare unavailable while preventing standby")
+    end
+
     self._standby_prevented = true
     logger.info("FileSync: Standby prevented")
     return true
@@ -936,6 +944,14 @@ function FileSyncManager:allowStandby()
         return true
     end
 
+    local ok_share, PluginShare = pcall(require, "pluginshare")
+    if ok_share and type(PluginShare) == "table" then
+        PluginShare.pause_auto_suspend = nil
+        logger.info("FileSync: Auto-suspend resumed via PluginShare")
+    else
+        logger.warn("FileSync: PluginShare unavailable while restoring standby")
+    end
+
     local ok, err = pcall(function()
         UIManager:allowStandby()
     end)
@@ -943,8 +959,9 @@ function FileSyncManager:allowStandby()
         return false, err
     end
 
-    self._standby_prevented = false
     logger.info("FileSync: Standby allowed")
+
+    self._standby_prevented = false
     return true
 end
 
@@ -1193,11 +1210,27 @@ function FileSyncManager:showQRCode()
         if close_btn.dimen then
             if x >= close_btn.dimen.x and x <= close_btn.dimen.x + close_btn.dimen.w
                and y >= close_btn.dimen.y and y <= close_btn.dimen.y + close_btn.dimen.h then
-                -- X button tapped: dismiss QR screen, show info, keep server running
-                self._manager:closeQRScreen()
-                UIManager:show(InfoMessage:new{
-                    text = _("Server running in the background. Stop the server to save battery."),
-                    timeout = 4,
+                -- X button tapped: ask user what to do
+                local manager = self._manager
+                UIManager:show(ConfirmBox:new{
+                    title = _("File server is running"),
+                    text = _("The server will keep running in the background and prevent the device from sleeping. What would you like to do?"),
+                    ok_text = _("Stop server"),
+                    cancel_text = _("Keep running"),
+                    ok_callback = function()
+                        manager:closeQRScreen()
+                        UIManager:show(InfoMessage:new{
+                            text = _("Stopping server..."),
+                            timeout = 2,
+                        })
+                        UIManager:scheduleIn(0.5, function()
+                            manager:stop(true)
+                            UIManager:restartKOReader()
+                        end)
+                    end,
+                    cancel_callback = function()
+                        manager:closeQRScreen()
+                    end,
                 })
                 return true
             end

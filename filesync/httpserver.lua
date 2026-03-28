@@ -64,6 +64,9 @@ end
 
 function HttpServer:stop()
     self._running = false
+    if self._poll_fn then
+        UIManager:unschedule(self._poll_fn)
+    end
     self._root_sessions = {}
     self._unlock_rate_limits = {}
     if self._server_socket then

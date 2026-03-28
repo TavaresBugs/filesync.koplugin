@@ -44,6 +44,7 @@ local FileSyncManager = {
     _qr_widget = nil,
     _qr_auto_dismiss_fn = nil,
     _wifi_monitor_tick_fn = nil,
+    _auto_suspend_pause_owned = false,
 }
 
 local DEFAULT_PORT = 80
@@ -932,12 +933,17 @@ function FileSyncManager:preventStandby()
         return false, err
     end
 
-    local ok_share, PluginShare = pcall(require, "pluginshare")
-    if ok_share and type(PluginShare) == "table" then
-        PluginShare.pause_auto_suspend = true
-        logger.info("FileSync: Auto-suspend paused via PluginShare")
-    else
-        logger.warn("FileSync: PluginShare unavailable while preventing standby")
+    -- Deep auto-suspend pause is required mainly on Kobo. Applying it on
+    -- Kindle can keep the device awake for too long while the server idles.
+    if Device:isKobo and Device:isKobo() then
+        local ok_share, PluginShare = pcall(require, "pluginshare")
+        if ok_share and type(PluginShare) == "table" then
+            PluginShare.pause_auto_suspend = true
+            self._auto_suspend_pause_owned = true
+            logger.info("FileSync: Auto-suspend paused via PluginShare (Kobo)")
+        else
+            logger.warn("FileSync: PluginShare unavailable while preventing standby")
+        end
     end
 
     self._standby_prevented = true
@@ -950,12 +956,15 @@ function FileSyncManager:allowStandby()
         return true
     end
 
-    local ok_share, PluginShare = pcall(require, "pluginshare")
-    if ok_share and type(PluginShare) == "table" then
-        PluginShare.pause_auto_suspend = nil
-        logger.info("FileSync: Auto-suspend resumed via PluginShare")
-    else
-        logger.warn("FileSync: PluginShare unavailable while restoring standby")
+    if self._auto_suspend_pause_owned then
+        local ok_share, PluginShare = pcall(require, "pluginshare")
+        if ok_share and type(PluginShare) == "table" then
+            PluginShare.pause_auto_suspend = nil
+            logger.info("FileSync: Auto-suspend resumed via PluginShare")
+        else
+            logger.warn("FileSync: PluginShare unavailable while restoring standby")
+        end
+        self._auto_suspend_pause_owned = false
     end
 
     local ok, err = pcall(function()

@@ -4,7 +4,7 @@ local _ = ok_i18n and plugin_gettext or require("gettext")
 local T = require("ffi/util").template
 
 local Updater = {
-    _github_api_url = "https://api.github.com/repos/abrahamnm/filesync.koplugin/releases/latest",
+    _github_api_url = "https://api.github.com/repos/TavaresBugs/filesync.koplugin/releases/latest",
 }
 
 --- Get the plugin directory path dynamically.

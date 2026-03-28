@@ -7,6 +7,9 @@ local ROOT_SESSION_TTL = 15 * 60
 local UNLOCK_FAILURE_RESET_AFTER = 15 * 60
 local UNLOCK_RATE_LIMIT_TTL = 24 * 60 * 60
 local UNLOCK_BACKOFF_STEPS = {0, 0, 5, 15, 30, 60, 120, 300}
+local POLL_INTERVAL_IDLE = 2.0
+local POLL_INTERVAL_ACTIVE = 0.5
+local MAX_UPLOAD_SIZE = 100 * 1024 * 1024 -- 100 MB
 
 local HttpServer = {
     port = 80,
@@ -70,22 +73,27 @@ function HttpServer:stop()
     logger.info("FileSync HTTP: Server stopped")
 end
 
-function HttpServer:_schedulePoll()
+function HttpServer:_schedulePoll(interval)
     if not self._running then return end
-    UIManager:scheduleIn(0.1, function()
-        self:_poll()
-    end)
+    if not self._poll_fn then
+        self._poll_fn = function()
+            self:_poll()
+        end
+    end
+    UIManager:scheduleIn(interval or POLL_INTERVAL_IDLE, self._poll_fn)
 end
 
 function HttpServer:_poll()
     if not self._running or not self._server_socket then return end
 
     -- Process up to 4 pending connections per cycle (browser may open several at once)
-    for _ = 1, 4 do
+    local had_client = false
+    for _ = 1, 2 do
         local client = self._server_socket:accept()
         if not client then break end
 
-        client:settimeout(5)
+        had_client = true
+        client:settimeout(2)
         local ok, err = pcall(function()
             self:_handleClient(client)
         end)
@@ -100,7 +108,8 @@ function HttpServer:_poll()
         pcall(function() client:close() end)
     end
 
-    self:_schedulePoll()
+    -- Adaptive polling: fast when serving clients, slow when idle
+    self:_schedulePoll(had_client and POLL_INTERVAL_ACTIVE or POLL_INTERVAL_IDLE)
 end
 
 function HttpServer:invalidateAllRootSessions()
@@ -507,6 +516,10 @@ function HttpServer:_registerUnlockFailure(keys)
 end
 
 function HttpServer:_getSessionSafeMode(has_root_pin, root_unlocked)
+    local FileSyncManager = require("filesync/filesyncmanager")
+    if FileSyncManager:getSafeMode() then
+        return true
+    end
     return not (has_root_pin and root_unlocked)
 end
 
@@ -575,9 +588,13 @@ function HttpServer:_handleClient(client)
         end
     end
 
-    -- Read body if present
+    -- Read body if present (enforce upload size limit)
     local body = nil
     local content_length = tonumber(headers["content-length"])
+    if content_length and content_length > MAX_UPLOAD_SIZE then
+        self:_sendJSON(client, 413, {error = "Upload too large (max 100 MB)"})
+        return
+    end
     if content_length and content_length > 0 then
         body = self:_readBody(client, content_length)
     end
@@ -866,18 +883,10 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
                 self:_sendJSON(client, 400, {error = "Missing path parameter"})
                 return
             end
-            -- Block non-whitelisted files in safe mode
-            if session_safe_mode then
-                local filename = file_path:match("([^/]+)$")
-                if filename and not FileOps:isExtensionSafe(filename) then
-                    self:_sendJSON(client, 403, {error = "Access denied: file type not allowed in safe mode"})
-                    return
-                end
-            end
             local inline = query.preview == "1"
-            local ok, err_msg = FileOps:downloadFile(client, file_path, self, inline, file_options)
+            local ok, err_msg, status_code = FileOps:downloadFile(client, file_path, self, inline, file_options)
             if not ok then
-                self:_sendJSON(client, 400, {error = err_msg or "Cannot download file"})
+                self:_sendJSON(client, status_code or 400, {error = err_msg or "Cannot download file"})
             end
 
         elseif method == "POST" and path == "/api/upload" then
@@ -1202,32 +1211,19 @@ function HttpServer:_encodeJSON(value)
 end
 
 function HttpServer:_escapeJSONString(s)
-    local result = {}
-    for i = 1, #s do
-        local b = string.byte(s, i)
-        if b == 34 then         -- "
-            result[#result + 1] = '\\"'
-        elseif b == 92 then     -- \
-            result[#result + 1] = '\\\\'
-        elseif b == 47 then     -- /
-            result[#result + 1] = '\\/'
-        elseif b == 8 then      -- backspace
-            result[#result + 1] = '\\b'
-        elseif b == 12 then     -- form feed
-            result[#result + 1] = '\\f'
-        elseif b == 10 then     -- newline
-            result[#result + 1] = '\\n'
-        elseif b == 13 then     -- carriage return
-            result[#result + 1] = '\\r'
-        elseif b == 9 then      -- tab
-            result[#result + 1] = '\\t'
-        elseif b < 32 then      -- other control chars
-            result[#result + 1] = string.format("\\u%04x", b)
-        else
-            result[#result + 1] = string.char(b)
-        end
-    end
-    return table.concat(result)
+    local escape_map = {
+        ['"']  = '\\"',
+        ['\\'] = '\\\\',
+        ['/']  = '\\/',
+        ['\b'] = '\\b',
+        ['\f'] = '\\f',
+        ['\n'] = '\\n',
+        ['\r'] = '\\r',
+        ['\t'] = '\\t',
+    }
+    return s:gsub('[%z\1-\31\\"/]', function(c)
+        return escape_map[c] or string.format("\\u%04x", string.byte(c))
+    end)
 end
 
 --- Minimal JSON decoder

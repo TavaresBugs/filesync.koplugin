@@ -42,6 +42,8 @@ local FileSyncManager = {
     _was_running_before_suspend = false,
     _standby_prevented = false,
     _qr_widget = nil,
+    _qr_auto_dismiss_fn = nil,
+    _wifi_monitor_tick_fn = nil,
 }
 
 local DEFAULT_PORT = 80
@@ -51,7 +53,7 @@ local KINDLE_IPTABLES_CANDIDATES = {
     "/sbin/iptables",
     "iptables",
 }
-local WIFI_MONITOR_INTERVAL_SECONDS = 5
+local WIFI_MONITOR_INTERVAL_SECONDS = 15
 local PORT_SETTING_KEY = "filesync_port"
 local PORT_USER_DEFINED_SETTING_KEY = "filesync_port_user_defined"
 -- NOTE: Port 80 is used by default for convenience (no :port in the URL).
@@ -577,6 +579,10 @@ end
 function FileSyncManager:_stopWifiMonitor()
     self._wifi_monitor_active = false
     self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
+    if self._wifi_monitor_tick_fn then
+        UIManager:unschedule(self._wifi_monitor_tick_fn)
+        self._wifi_monitor_tick_fn = nil
+    end
     self._wifi_monitor_last_online = nil
     self._wifi_monitor_last_ip = nil
 end
@@ -628,7 +634,7 @@ function FileSyncManager:_ensureWifiMonitor()
     self._wifi_monitor_generation = (self._wifi_monitor_generation or 0) + 1
     local generation = self._wifi_monitor_generation
 
-    local function tick()
+    self._wifi_monitor_tick_fn = function()
         if not self._wifi_monitor_active or self._wifi_monitor_generation ~= generation then
             return
         end
@@ -636,11 +642,11 @@ function FileSyncManager:_ensureWifiMonitor()
         self:_pollWifiMonitor()
 
         if self._wifi_monitor_active and self._wifi_monitor_generation == generation then
-            UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+            UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, self._wifi_monitor_tick_fn)
         end
     end
 
-    UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, tick)
+    UIManager:scheduleIn(WIFI_MONITOR_INTERVAL_SECONDS, self._wifi_monitor_tick_fn)
 end
 
 function FileSyncManager:_refreshWifiMonitor()
@@ -1003,6 +1009,10 @@ function FileSyncManager:checkBatteryAndStart()
 end
 
 function FileSyncManager:closeQRScreen()
+    if self._qr_auto_dismiss_fn then
+        UIManager:unschedule(self._qr_auto_dismiss_fn)
+        self._qr_auto_dismiss_fn = nil
+    end
     if self._qr_widget then
         UIManager:close(self._qr_widget, "full")
         self._qr_widget = nil
@@ -1247,6 +1257,20 @@ function FileSyncManager:showQRCode()
 
     self._qr_widget = widget
     UIManager:show(widget, "full")
+
+    -- Auto-dismiss the QR screen after 1 minute to prevent device freeze.
+    -- The server keeps running in the background.
+    local qr_ref = widget
+    self._qr_auto_dismiss_fn = function()
+        if self._qr_widget == qr_ref then
+            self:closeQRScreen()
+            UIManager:show(InfoMessage:new{
+                text = _("QR screen closed automatically. Server still running in the background."),
+                timeout = 4,
+            })
+        end
+    end
+    UIManager:scheduleIn(60, self._qr_auto_dismiss_fn)
 end
 
 function FileSyncManager:openKindleFirewall(port)

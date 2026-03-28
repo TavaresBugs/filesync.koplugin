@@ -556,18 +556,20 @@ html, body {
     }
 
     .header-inner {
-        flex-wrap: wrap;
-        align-items: flex-start;
+        flex-wrap: nowrap;
+        align-items: center;
         gap: 10px;
     }
 
     .header-controls {
-        width: 100%;
-        justify-content: space-between;
+        width: auto;
+        margin-left: auto;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
     }
 
     .header-actions {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: flex-end;
     }
 }
@@ -809,7 +811,8 @@ html, body {
     }
 
     .search-box {
-        flex-basis: 100%;
+        flex: 1 1 auto;
+        min-width: 0;
     }
 
     .sort-select {
@@ -1041,6 +1044,14 @@ html, body {
     justify-content: flex-end;
 }
 
+.file-list.view-grid .file-item.is-file .file-actions.file-actions-chevron .btn-icon {
+    display: none;
+}
+
+.file-list.view-grid .file-item.is-file .file-actions.file-actions-chevron .file-chevron {
+    display: flex;
+}
+
 .file-list.view-grid .file-actions .file-chevron {
     position: absolute;
     right: 10px;
@@ -1134,6 +1145,14 @@ html, body {
     justify-content: flex-end;
 }
 
+.file-list.view-grid-large .file-item.is-file .file-actions.file-actions-chevron .btn-icon {
+    display: none;
+}
+
+.file-list.view-grid-large .file-item.is-file .file-actions.file-actions-chevron .file-chevron {
+    display: flex;
+}
+
 .file-list.view-grid-large .file-actions .file-chevron {
     position: absolute;
     right: 10px;
@@ -1184,6 +1203,10 @@ html, body {
 
 .file-item.selection-mode .file-select-marker {
     display: flex;
+}
+
+.file-list:not(.view-grid):not(.view-grid-large) .file-item.selection-mode .file-select-marker {
+    display: none;
 }
 
 .file-item.selected .file-select-marker {
@@ -1360,7 +1383,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list-header.visible {
-        grid-template-columns: var(--file-table-columns-selection);
+        grid-template-columns: var(--file-table-columns);
     }
 
     .file-list-header-cell {
@@ -1372,7 +1395,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list-header-cell.name {
-        grid-column: 3;
+        grid-column: 2;
     }
 
     .file-list-header-cell.size {
@@ -1381,7 +1404,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list-header-cell.size {
-        grid-column: 4;
+        grid-column: 3;
     }
 
     .file-list-header-cell.modified {
@@ -1390,7 +1413,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list-header-cell.modified {
-        grid-column: 5;
+        grid-column: 4;
     }
 
     .file-list-header-cell.type {
@@ -1399,7 +1422,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list-header-cell.type {
-        grid-column: 6;
+        grid-column: 5;
     }
 
     .file-list-header-button {
@@ -1455,28 +1478,25 @@ html, body {
         grid-template-columns: var(--file-table-columns);
         align-items: center;
         gap: 12px;
-        padding: 10px 14px 10px 8px;
+        padding: 10px 16px;
         margin-bottom: 6px;
         position: relative;
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-item {
-        grid-template-columns: var(--file-table-columns-selection);
+        grid-template-columns: var(--file-table-columns);
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-item.selection-mode {
-        padding-left: 8px;
+        padding-left: 16px;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-select-marker {
-        position: absolute;
-        left: -9999px;
+        display: none;
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-select-marker {
-        grid-column: 1;
-        justify-self: center;
-        position: static;
+        display: none;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-main {
@@ -1492,7 +1512,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-icon {
-        grid-column: 2;
+        grid-column: 1;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-info {
@@ -1503,7 +1523,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-info {
-        grid-column: 3;
+        grid-column: 2;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-name {
@@ -1538,7 +1558,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-size {
-        grid-column: 4;
+        grid-column: 3;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-table-date {
@@ -1547,7 +1567,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-date {
-        grid-column: 5;
+        grid-column: 4;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-table-type {
@@ -1558,7 +1578,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-table-type {
-        grid-column: 6;
+        grid-column: 5;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-actions {
@@ -1568,7 +1588,7 @@ html, body {
     }
 
     body.selection-mode-active .file-list:not(.view-grid):not(.view-grid-large) .file-actions {
-        grid-column: 7;
+        grid-column: 6;
     }
 
     .file-list:not(.view-grid):not(.view-grid-large) .file-actions .file-chevron {
@@ -5095,7 +5115,7 @@ html, body {
                 }
                 html += '</div>';
             } else {
-                html += '<div class="file-actions">';
+                html += '<div class="file-actions file-actions-chevron">';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); downloadFile(\'' + escapeAttr(entry.path) + '\')" title="' + escapeHtml(t('download')) + '">' + icons.download + '</button>';
                 html += '<button class="btn-icon" onclick="event.stopPropagation(); renameItem(\'' + escapeAttr(entry.path) + '\', \'' + escapeAttr(entry.name) + '\')" title="' + escapeHtml(t('rename')) + '">' + icons.rename + '</button>';
                 if (showQuickDelete) {

@@ -4361,6 +4361,32 @@ html, body {
         return FILE_TYPE_BY_EXTENSION[extMatch[1]] || '';
     }
 
+    function getFileDisplayParts(name) {
+        var originalName = String(name || '');
+        var lowerName = originalName.toLowerCase();
+        if (!originalName) {
+            return { baseName: '', extensionLabel: '' };
+        }
+
+        var compoundMatch = lowerName.match(/\.([^.]+\.[^.]+)$/);
+        if (compoundMatch && FILE_TYPE_BY_COMPOUND_EXTENSION[compoundMatch[1]] && originalName.length > compoundMatch[1].length + 1) {
+            return {
+                baseName: originalName.slice(0, -(compoundMatch[1].length + 1)),
+                extensionLabel: '.' + compoundMatch[1].toLowerCase()
+            };
+        }
+
+        var lastDot = originalName.lastIndexOf('.');
+        if (lastDot <= 0 || lastDot === originalName.length - 1) {
+            return { baseName: originalName, extensionLabel: '' };
+        }
+
+        return {
+            baseName: originalName.slice(0, lastDot),
+            extensionLabel: originalName.slice(lastDot).toLowerCase()
+        };
+    }
+
     function resolveEntryTypeClass(entry) {
         if (!entry) return 'file';
         if (entry.is_dir) return 'dir';
@@ -5085,10 +5111,12 @@ html, body {
             var meta = [size, date].filter(Boolean).join(' &middot; ');
             var tableSize = entry.is_dir ? '' : size;
             var tableDate = date || '';
-            var extMatch = entry.name.match(/\.([^.]+)$/);
-            var ext = extMatch ? extMatch[1].toUpperCase() : t('unknown');
+            var displayParts = entry.is_dir ? { baseName: entry.name, extensionLabel: '' } : getFileDisplayParts(entry.name);
+            var hideExtensionInName = !entry.is_dir && (viewMode === 'grid' || viewMode === 'grid-large');
+            var displayName = hideExtensionInName ? (displayParts.baseName || entry.name) : entry.name;
+            var ext = displayParts.extensionLabel ? displayParts.extensionLabel.slice(1).toUpperCase() : t('unknown');
             var typeLabel = entry.is_dir ? t('folder_label') : ext;
-            var tableTypeLabel = entry.is_dir ? t('folder_label') : (extMatch ? '.' + extMatch[1].toLowerCase() : '—');
+            var tableTypeLabel = entry.is_dir ? t('folder_label') : (displayParts.extensionLabel || '—');
             var isSelected = selectedPaths.indexOf(entry.path) !== -1;
             var itemClass = 'file-item ' + (entry.is_dir ? 'is-dir' : 'is-file');
             if (entry.name && entry.name.charAt(0) === '.') itemClass += ' is-hidden';
@@ -5107,7 +5135,7 @@ html, body {
             html += '<div class="file-main">';
             html += '<div class="file-icon ' + typeClass + '">' + icon + '</div>';
             html += '<div class="file-info">';
-            html += '<div class="file-name">' + escapeHtml(entry.name) + '</div>';
+            html += '<div class="file-name">' + escapeHtml(displayName) + '</div>';
             html += '<div class="file-meta">';
             if (typeLabel) html += '<span>' + escapeHtml(typeLabel) + '</span>';
             if (meta) html += '<span>' + meta + '</span>';

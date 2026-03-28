@@ -9,7 +9,8 @@ local UNLOCK_RATE_LIMIT_TTL = 24 * 60 * 60
 local UNLOCK_BACKOFF_STEPS = {0, 0, 5, 15, 30, 60, 120, 300}
 local POLL_INTERVAL_IDLE = 2.0
 local POLL_INTERVAL_ACTIVE = 0.5
-local MAX_UPLOAD_SIZE = 100 * 1024 * 1024 -- 100 MB
+local MAX_UPLOAD_SIZE = 256 * 1024 * 1024 -- 256 MB
+local UPLOAD_STREAM_THRESHOLD = 2 * 1024 * 1024 -- 2 MB: stream to disk above this
 
 local HttpServer = {
     port = 80,
@@ -590,13 +591,11 @@ function HttpServer:_handleClient(client)
 
     -- Read body if present (enforce upload size limit)
     local body = nil
+    local body_file = nil
     local content_length = tonumber(headers["content-length"])
     if content_length and content_length > MAX_UPLOAD_SIZE then
-        self:_sendJSON(client, 413, {error = "Upload too large (max 100 MB)"})
+        self:_sendJSON(client, 413, {error = "Upload too large (max 256 MB)"})
         return
-    end
-    if content_length and content_length > 0 then
-        body = self:_readBody(client, content_length)
     end
 
     -- Split path from query string BEFORE decoding (query params decoded individually)
@@ -605,14 +604,27 @@ function HttpServer:_handleClient(client)
         raw_path = path
         query_string = ""
     end
-
-    -- URL decode the path portion only
     local path_part = self:_urlDecode(raw_path)
+
+    -- For large uploads, stream body to a temp file instead of loading into RAM
+    local is_upload = method == "POST" and path_part == "/api/upload"
+    if content_length and content_length > 0 then
+        if is_upload and content_length > UPLOAD_STREAM_THRESHOLD then
+            local tmp_path, stream_err = self:_readBodyToFile(client, content_length)
+            if not tmp_path then
+                self:_sendJSON(client, 500, {error = "Failed to receive upload: " .. tostring(stream_err)})
+                return
+            end
+            body_file = tmp_path
+        else
+            body = self:_readBody(client, content_length)
+        end
+    end
 
     local query = self:_parseQuery(query_string or "")
 
     -- Route the request
-    self:_route(client, method, path_part, query, headers, body, self:_getClientIP(client))
+    self:_route(client, method, path_part, query, headers, body, self:_getClientIP(client), body_file)
 end
 
 function HttpServer:_readBody(client, length)
@@ -636,7 +648,36 @@ function HttpServer:_readBody(client, length)
     return table.concat(parts)
 end
 
-function HttpServer:_route(client, method, path, query, headers, body, client_ip)
+function HttpServer:_readBodyToFile(client, length)
+    local tmp_path = string.format("/tmp/filesync-upload-%d-%d.tmp", os.time(), math.random(10000, 99999))
+    local f, open_err = io.open(tmp_path, "wb")
+    if not f then
+        return nil, "Cannot create temp file: " .. tostring(open_err)
+    end
+
+    local MAX_CHUNK = 65536
+    local remaining = length
+    while remaining > 0 do
+        local chunk_size = math.min(remaining, MAX_CHUNK)
+        local data, err, partial = client:receive(chunk_size)
+        if data then
+            f:write(data)
+            remaining = remaining - #data
+        elseif partial and #partial > 0 then
+            f:write(partial)
+            remaining = remaining - #partial
+        else
+            f:close()
+            os.remove(tmp_path)
+            return nil, "Connection lost during upload: " .. tostring(err)
+        end
+    end
+
+    f:close()
+    return tmp_path
+end
+
+function HttpServer:_route(client, method, path, query, headers, body, client_ip, body_file)
     -- Handle CORS preflight
     if method == "OPTIONS" then
         local resp = table.concat({
@@ -896,7 +937,13 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
             if content_type:match("multipart/form%-data") then
                 local boundary = content_type:match("boundary=([^\r\n;]+)")
                 if boundary then
-                    local ok, err_msg, err_details = FileOps:handleUpload(dir, body, boundary, file_options)
+                    local ok, err_msg, err_details
+                    if body_file then
+                        ok, err_msg, err_details = FileOps:handleUploadFromFile(dir, body_file, boundary, file_options)
+                        os.remove(body_file)
+                    else
+                        ok, err_msg, err_details = FileOps:handleUpload(dir, body, boundary, file_options)
+                    end
                     if ok then
                         self:_sendJSON(client, 200, {success = true, message = "Upload complete"})
                     elseif err_msg == "Root mode required for this file type" then
@@ -914,9 +961,11 @@ function HttpServer:_route(client, method, path, query, headers, body, client_ip
                         self:_sendJSON(client, err_details and err_details.code == "destination_exists" and 409 or 400, payload)
                     end
                 else
+                    if body_file then os.remove(body_file) end
                     self:_sendJSON(client, 400, {error = "Missing boundary in content-type"})
                 end
             else
+                if body_file then os.remove(body_file) end
                 self:_sendJSON(client, 400, {error = "Expected multipart/form-data"})
             end
 

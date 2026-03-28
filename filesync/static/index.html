@@ -808,6 +808,7 @@ html, body {
 @media (max-width: 720px) {
     .toolbar {
         gap: 10px;
+        flex-wrap: nowrap;
     }
 
     .search-box {
@@ -815,8 +816,16 @@ html, body {
         min-width: 0;
     }
 
+    .toolbar .nav-context {
+        margin-left: 0;
+        gap: 6px;
+    }
+
     .sort-select {
-        margin-left: auto;
+        margin-left: 0;
+        flex: 0 1 136px;
+        min-width: 112px;
+        max-width: 136px;
     }
 }
 
@@ -2831,8 +2840,9 @@ html, body {
     }
 
     .nav-scope-select {
-        flex: 1 1 auto;
-        max-width: none;
+        flex: 0 1 auto;
+        min-width: 78px;
+        max-width: 128px;
     }
 }
 

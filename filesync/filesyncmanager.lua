@@ -927,60 +927,26 @@ function FileSyncManager:stop(silent, keep_qr_screen, preserve_restart_intent)
 end
 
 function FileSyncManager:preventStandby()
-    if self._standby_prevented then
-        return true
-    end
-
-    local ok, err = pcall(function()
-        UIManager:preventStandby()
-    end)
-    if not ok then
-        return false, err
-    end
-
-    -- Deep auto-suspend pause is required mainly on Kobo. Applying it on
-    -- Kindle can keep the device awake for too long while the server idles.
-    if Device:isKobo and Device:isKobo() then
-        local ok_share, PluginShare = pcall(require, "pluginshare")
-        if ok_share and type(PluginShare) == "table" then
-            PluginShare.pause_auto_suspend = true
-            self._auto_suspend_pause_owned = true
-            logger.info("FileSync: Auto-suspend paused via PluginShare (Kobo)")
-        else
-            logger.warn("FileSync: PluginShare unavailable while preventing standby")
-        end
-    end
-
-    self._standby_prevented = true
-    logger.info("FileSync: Standby prevented")
+    -- Respect natural Kindle/KOReader suspend behavior while server runs.
+    self._standby_prevented = false
+    self._auto_suspend_pause_owned = false
+    logger.info("FileSync: Natural suspend preserved while server is running")
     return true
 end
 
 function FileSyncManager:allowStandby()
-    if not self._standby_prevented then
-        return true
+    -- Best-effort cleanup for sessions started before this behavior change.
+    local ok_share, PluginShare = pcall(require, "pluginshare")
+    if ok_share and type(PluginShare) == "table" and PluginShare.pause_auto_suspend then
+        PluginShare.pause_auto_suspend = nil
+        logger.info("FileSync: Cleared legacy auto-suspend pause flag")
     end
 
-    if self._auto_suspend_pause_owned then
-        local ok_share, PluginShare = pcall(require, "pluginshare")
-        if ok_share and type(PluginShare) == "table" then
-            PluginShare.pause_auto_suspend = nil
-            logger.info("FileSync: Auto-suspend resumed via PluginShare")
-        else
-            logger.warn("FileSync: PluginShare unavailable while restoring standby")
-        end
-        self._auto_suspend_pause_owned = false
-    end
-
-    local ok, err = pcall(function()
+    pcall(function()
         UIManager:allowStandby()
     end)
-    if not ok then
-        return false, err
-    end
 
-    logger.info("FileSync: Standby allowed")
-
+    self._auto_suspend_pause_owned = false
     self._standby_prevented = false
     return true
 end
@@ -1238,7 +1204,7 @@ function FileSyncManager:showQRCode()
                 local manager = self._manager
                 UIManager:show(ConfirmBox:new{
                     title = _("File server is running"),
-                    text = _("The server will keep running in the background and prevent the device from sleeping. What would you like to do?"),
+                    text = _("The server will keep running in the background. What would you like to do?"),
                     ok_text = _("Stop server"),
                     cancel_text = _("Keep running"),
                     ok_callback = function()

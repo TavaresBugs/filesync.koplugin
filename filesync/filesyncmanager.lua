@@ -570,6 +570,22 @@ function FileSyncManager:showQRCode()
 
     self._qr_widget = widget
     UIManager:show(widget, "full")
+
+    -- Auto-dismiss the QR screen after 1 minute to prevent device freeze.
+    -- On Kindle, the full-screen widget blocks e-ink refreshes while the
+    -- server poll loop keeps running underneath, which can make the device
+    -- appear frozen.  The server continues in the background; the user can
+    -- reopen this screen from the menu at any time.
+    local qr_ref = widget
+    UIManager:scheduleIn(60, function()
+        if self._qr_widget and self._qr_widget == qr_ref then
+            self:closeQRScreen()
+            UIManager:show(InfoMessage:new{
+                text = _("QR screen closed automatically. Server still running in the background."),
+                timeout = 4,
+            })
+        end
+    end)
 end
 
 function FileSyncManager:openKindleFirewall(port)

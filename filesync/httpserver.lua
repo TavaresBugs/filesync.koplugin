@@ -2,6 +2,13 @@ local logger = require("logger")
 local socket = require("socket")
 local UIManager = require("ui/uimanager")
 
+-- Adaptive polling intervals to reduce CPU and GC pressure on low-power
+-- devices (e.g. Kindle).  The original 100 ms fixed interval caused ~600
+-- UIManager schedule calls per minute even when no client was connected,
+-- creating closure churn that overwhelmed Lua's garbage collector on ARM.
+local POLL_INTERVAL_IDLE = 1.0   -- 1 s when no clients are connecting
+local POLL_INTERVAL_ACTIVE = 0.2 -- 200 ms while actively serving requests
+
 local HttpServer = {
     port = 8080,
     root_dir = "/mnt/us",
@@ -56,21 +63,27 @@ function HttpServer:stop()
     logger.info("FileSync HTTP: Server stopped")
 end
 
-function HttpServer:_schedulePoll()
+function HttpServer:_schedulePoll(interval)
     if not self._running then return end
-    UIManager:scheduleIn(0.1, function()
-        self:_poll()
-    end)
+    -- Reuse a single closure to avoid allocating a new one every cycle.
+    if not self._poll_fn then
+        self._poll_fn = function()
+            self:_poll()
+        end
+    end
+    UIManager:scheduleIn(interval or POLL_INTERVAL_IDLE, self._poll_fn)
 end
 
 function HttpServer:_poll()
     if not self._running or not self._server_socket then return end
 
     -- Process up to 4 pending connections per cycle (browser may open several at once)
+    local had_client = false
     for _ = 1, 4 do
         local client = self._server_socket:accept()
         if not client then break end
 
+        had_client = true
         client:settimeout(5)
         local ok, err = pcall(function()
             self:_handleClient(client)
@@ -86,7 +99,8 @@ function HttpServer:_poll()
         pcall(function() client:close() end)
     end
 
-    self:_schedulePoll()
+    -- Adaptive polling: respond quickly while clients are active, back off when idle
+    self:_schedulePoll(had_client and POLL_INTERVAL_ACTIVE or POLL_INTERVAL_IDLE)
 end
 
 function HttpServer:_handleClient(client)

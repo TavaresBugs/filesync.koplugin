@@ -31,6 +31,9 @@ msgstr "Modo seguro"
 msgid "Show QR code"
 msgstr "Mostrar código QR"
 
+msgid "Check for updates"
+msgstr "Verificar atualizações"
+
 msgid "About"
 msgstr "Sobre"
 
@@ -93,6 +96,75 @@ msgstr "Servidor em execução em segundo plano. Pare o servidor para economizar
 
 msgid "Image preview"
 msgstr "Prévia de imagem"
+
+msgid "Network error: could not reach GitHub."
+msgstr "Erro de rede: não foi possível acessar o GitHub."
+
+msgid "GitHub API returned status %1."
+msgstr "A API do GitHub retornou o status %1."
+
+msgid "Failed to parse update information from GitHub."
+msgstr "Falha ao processar as informações de atualização do GitHub."
+
+msgid "Download failed: network error."
+msgstr "Falha no download: erro de rede."
+
+msgid "Cannot create temporary file: %1"
+msgstr "Não foi possível criar arquivo temporário: %1"
+
+msgid "Download failed with status %1."
+msgstr "Falha no download com status %1."
+
+msgid "Cannot determine plugin parent directory."
+msgstr "Não foi possível determinar o diretório pai do plugin."
+
+msgid "Update verification failed: extracted files do not look like a valid plugin."
+msgstr "Falha na verificação da atualização: os arquivos extraídos não parecem um plugin válido."
+
+msgid "Failed to install update. Previous version has been restored."
+msgstr "Falha ao instalar a atualização. A versão anterior foi restaurada."
+
+msgid "WiFi is not enabled. Please turn on WiFi and try again."
+msgstr "O Wi-Fi não está ativado. Ative o Wi-Fi e tente novamente."
+
+msgid "Checking for updates..."
+msgstr "Verificando atualizações..."
+
+msgid "Could not check for updates.\n\n%1"
+msgstr "Não foi possível verificar atualizações.\n\n%1"
+
+msgid "Could not determine the latest version."
+msgstr "Não foi possível determinar a versão mais recente."
+
+msgid "FileSync is up to date (v%1)."
+msgstr "O FileSync está atualizado (v%1)."
+
+msgid "A new version of FileSync is available!\n\nCurrent: v%1\nNew: v%2"
+msgstr "Uma nova versão do FileSync está disponível!\n\nAtual: v%1\nNova: v%2"
+
+msgid "Update now"
+msgstr "Atualizar agora"
+
+msgid "Later"
+msgstr "Depois"
+
+msgid "Could not find a download URL for this release."
+msgstr "Não foi possível encontrar uma URL de download para esta versão."
+
+msgid "Downloading update..."
+msgstr "Baixando atualização..."
+
+msgid "Download failed.\n\n%1"
+msgstr "Falha no download.\n\n%1"
+
+msgid "Installing update..."
+msgstr "Instalando atualização..."
+
+msgid "FileSync has been updated successfully!\n\nPlease restart KOReader for the changes to take effect."
+msgstr "O FileSync foi atualizado com sucesso!\n\nReinicie o KOReader para que as alterações tenham efeito."
+
+msgid "Restart now"
+msgstr "Reiniciar agora"
 
 msgid "Define Root PIN"
 msgstr "Definir PIN Root"

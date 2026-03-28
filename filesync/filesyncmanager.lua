@@ -874,7 +874,12 @@ function FileSyncManager:start(silent)
 end
 
 function FileSyncManager:stop(silent, keep_qr_screen, preserve_restart_intent)
-    if not self._running and not self._server and not self._standby_prevented and not self._kindle_firewall_port then
+    if not self._running
+        and not self._server
+        and not self._standby_prevented
+        and not self._kindle_firewall_port
+        and not self._wifi_monitor_active
+        and not self._restart_desired then
         return
     end
 

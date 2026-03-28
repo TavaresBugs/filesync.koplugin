@@ -1200,28 +1200,8 @@ function FileSyncManager:showQRCode()
         if close_btn.dimen then
             if x >= close_btn.dimen.x and x <= close_btn.dimen.x + close_btn.dimen.w
                and y >= close_btn.dimen.y and y <= close_btn.dimen.y + close_btn.dimen.h then
-                -- X button tapped: ask user what to do
-                local manager = self._manager
-                UIManager:show(ConfirmBox:new{
-                    title = _("File server is running"),
-                    text = _("The server will keep running in the background. What would you like to do?"),
-                    ok_text = _("Stop server"),
-                    cancel_text = _("Keep running"),
-                    ok_callback = function()
-                        manager:closeQRScreen()
-                        UIManager:show(InfoMessage:new{
-                            text = _("Stopping server..."),
-                            timeout = 2,
-                        })
-                        UIManager:scheduleIn(0.5, function()
-                            manager:stop(true)
-                            UIManager:restartKOReader()
-                        end)
-                    end,
-                    cancel_callback = function()
-                        manager:closeQRScreen()
-                    end,
-                })
+                -- X button tapped: just close QR screen.
+                self._manager:closeQRScreen()
                 return true
             end
         end

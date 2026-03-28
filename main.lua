@@ -1,4 +1,5 @@
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local Device = require("device")
 local ok_i18n, plugin_gettext = pcall(require, "filesync/filesync_i18n")
 local _ = ok_i18n and plugin_gettext or require("gettext")
 local T = require("ffi/util").template
@@ -54,17 +55,9 @@ function FileSync:addToMainMenu(menu_items)
             keep_menu_open = true,
         },
         {
-            text = _("Safe mode"),
-            checked_func = function()
-                return FileSyncManager:getSafeMode()
+            text_func = function()
+                return _("Server port") .. " (" .. tostring(FileSyncManager:getPort()) .. ")"
             end,
-            callback = function()
-                FileSyncManager:setSafeMode(not FileSyncManager:getSafeMode())
-            end,
-            keep_menu_open = true,
-        },
-        {
-            text = _("Server port"),
             callback = function()
                 FileSyncManager:configurePort()
             end,
@@ -102,6 +95,19 @@ function FileSync:addToMainMenu(menu_items)
             keep_menu_open = true,
         },
     }
+
+    if not Device:isKindle() then
+        table.insert(sub_items, 2, {
+            text = _("Safe mode"),
+            checked_func = function()
+                return FileSyncManager:getSafeMode()
+            end,
+            callback = function()
+                FileSyncManager:setSafeMode(not FileSyncManager:getSafeMode())
+            end,
+            keep_menu_open = true,
+        })
+    end
 
     if FileSyncManager:hasRootPin() then
         table.insert(sub_items, {
